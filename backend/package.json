@@ -1,0 +1,24 @@
+{
+  "name": "inventario-app",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de inventario",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "init-db": "node scripts/initDb.js"
+  },
+  "keywords": ["inventario", "stock", "productos"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
