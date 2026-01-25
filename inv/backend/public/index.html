@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Inventario</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- LOGIN PAGE -->
+    <div class="login-container" id="loginPage">
+        <h1>🏪 Sistema de Inventario</h1>
+        <p>Ingresa tus credenciales para continuar</p>
+        
+        <form id="loginForm">
+            <div class="input-group">
+                <label>Usuario</label>
+                <input type="text" id="username" placeholder="Ingresa tu usuario" required>
+            </div>
+            
+            <div class="input-group">
+                <label>Contraseña</label>
+                <input type="password" id="password" placeholder="Ingresa tu contraseña" required>
+            </div>
+            
+            <button type="submit" class="btn-login">Iniciar Sesión</button>
+        </form>
+        
+        <p style="margin-top: 20px; font-size: 12px; color: #999;">
+            Usuario demo: <strong>admin</strong> | Contraseña: <strong>admin123</strong>
+        </p>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="dashboard" id="dashboard">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📦 Inventario</h2>
+                <p>Panel de Control</p>
+            </div>
+            
+            <div class="sidebar-menu">
+                <div class="menu-item active" data-section="dashboard">
+                    <span>📊</span> Dashboard
+                </div>
+                <div class="menu-item" data-section="productos">
+                    <span>📦</span> Productos
+                </div>
+                <div class="menu-item" data-section="categorias">
+                    <span>🏷️</span> Categorías
+                </div>
+                <div class="menu-item" data-section="movimientos">
+                    <span>📋</span> Movimientos
+                </div>
+                <div class="menu-item" data-section="reportes">
+                    <span>📈</span> Reportes
+                </div>
+            </div>
+            
+            <button class="logout-btn" onclick="logout()">🚪 Cerrar Sesión</button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="top-bar">
+                <h1 id="pageTitle">Dashboard</h1>
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div style="font-weight: 600;">Admin</div>
+                        <div style="font-size: 12px; color: #666;">Administrador</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DASHBOARD SECTION -->
+            <div class="content-section active" id="section-dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>TOTAL PRODUCTOS</h3>
+                        <div class="stat-value" id="totalProductos">0</div>
+                        <div class="stat-change">↑ Activos</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>STOCK TOTAL</h3>
+                        <div class="stat-value" id="stockTotal">0</div>
+                        <div class="stat-change">unidades</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>STOCK BAJO</h3>
+                        <div class="stat-value" id="stockBajo">0</div>
+                        <div class="stat-change" style="color: #ef4444;">⚠️ Productos</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>CATEGORÍAS</h3>
+                        <div class="stat-value" id="totalCategorias">0</div>
+                        <div class="stat-change">activas</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Productos con Stock Bajo</h2>
+                    </div>
+                    <table id="stockBajoTable">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>SKU</th>
+                                <th>Stock Actual</th>
+                                <th>Stock Mínimo</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PRODUCTOS SECTION -->
+            <div class="content-section" id="section-productos">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Gestión de Productos</h2>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" class="search-box" id="searchProductos" placeholder="🔍 Buscar productos...">
+                            <button class="btn btn-primary" onclick="mostrarFormProducto()">+ Nuevo Producto</button>
+                        </div>
+                    </div>
+
+                    <div id="formProducto" class="hidden" style="margin-bottom: 20px; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                        <h3 style="margin-bottom: 15px;">Agregar Producto</h3>
+                        <form id="productoForm">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Nombre</label>
+                                    <input type="text" name="nombre" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>SKU</label>
+                                    <input type="text" name="sku" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Precio</label>
+                                    <input type="number" step="0.01" name="precio" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Stock Inicial</label>
+                                    <input type="number" name="stock" value="0">
+                                </div>
+                                <div class="form-group">
+                                    <label>Stock Mínimo</label>
+                                    <input type="number" name="stock_minimo" value="0">
+                                </div>
+                                <div class="form-group">
+                                    <label>Categoría</label>
+                                    <select name="categoria_id" id="categoriaSelect"></select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Descripción</label>
+                                <textarea name="descripcion" rows="3"></textarea>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button type="submit" class="btn btn-success">Guardar</button>
+                                <button type="button" class="btn" onclick="ocultarFormProducto()" style="background: #e5e7eb;">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <table id="productosTable">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>SKU</th>
+                                <th>Categoría</th>
+                                <th>Precio</th>
+                                <th>Stock</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CATEGORÍAS SECTION -->
+            <div class="content-section" id="section-categorias">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Gestión de Categorías</h2>
+                        <button class="btn btn-primary" onclick="mostrarFormCategoria()">+ Nueva Categoría</button>
+                    </div>
+
+                    <div id="formCategoria" class="hidden" style="margin-bottom: 20px; padding: 20px; background: #f9fafb; border-radius: 10px;">
+                        <h3 style="margin-bottom: 15px;">Agregar Categoría</h3>
+                        <form id="categoriaForm">
+                            <div class="form-group">
+                                <label>Nombre</label>
+                                <input type="text" name="nombre" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Descripción</label>
+                                <textarea name="descripcion" rows="3"></textarea>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button type="submit" class="btn btn-success">Guardar</button>
+                                <button type="button" class="btn" onclick="ocultarFormCategoria()" style="background: #e5e7eb;">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <table id="categoriasTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Descripción</th>
+                                <th>Fecha Creación</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MOVIMIENTOS SECTION -->
+            <div class="content-section" id="section-movimientos">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Registrar Movimiento</h2>
+                    </div>
+                    <form id="movimientoForm" style="background: #f9fafb; padding: 20px; border-radius: 10px;">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Producto</label>
+                                <select name="producto_id" id="productoSelectMov" required></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Tipo de Movimiento</label>
+                                <select name="tipo" required>
+                                    <option value="ENTRADA">Entrada (Agregar Stock)</option>
+                                    <option value="SALIDA">Salida (Retirar Stock)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Cantidad</label>
+                                <input type="number" name="cantidad" min="1" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Motivo</label>
+                                <input type="text" name="motivo" placeholder="Ej: Compra, Venta, Devolución">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Registrar Movimiento</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Últimos Movimientos</h2>
+                    </div>
+                    <table id="movimientosTable">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Producto</th>
+                                <th>Tipo</th>
+                                <th>Cantidad</th>
+                                <th>Motivo</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- REPORTES SECTION -->
+            <div class="content-section" id="section-reportes">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Reportes del Sistema</h2>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                        <div style="padding: 20px; background: #f9fafb; border-radius: 10px;">
+                            <h3 style="margin-bottom: 10px;">📊 Reporte de Inventario</h3>
+                            <p style="color: #666; margin-bottom: 15px;">Genera un reporte completo del inventario actual</p>
+                            <button class="btn btn-primary" onclick="generarReporteInventario()">Generar Reporte</button>
+                        </div>
+                        <div style="padding: 20px; background: #f9fafb; border-radius: 10px;">
+                            <h3 style="margin-bottom: 10px;">⚠️ Stock Bajo</h3>
+                            <p style="color: #666; margin-bottom: 15px;">Lista de productos con stock bajo o crítico</p>
+                            <button class="btn btn-primary" onclick="verStockBajo()">Ver Reporte</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
