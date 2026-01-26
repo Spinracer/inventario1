@@ -1,0 +1,597 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║         HISTORIAL DETALLADO DE CAMBIOS - SISTEMA DE INVENTARIO                  ║
+║                          Enero 26, 2026                                          ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+PROYECTO: Sistema de Gestión de Inventario
+TECNOLOGÍA: Node.js + Express + PostgreSQL + Vanilla JavaScript
+ESTADO: ✅ COMPLETAMENTE FUNCIONAL
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 1: jsonwebtoken no encontrado en Docker
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: Dockerfile / docker-compose.yml
+LÍNEA: N/A (Problema de build)
+SOLUCIÓN: Reconstruir imagen Docker sin cachés
+COMANDO: docker-compose build --no-cache
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 2: Hash bcrypt incorrecto para usuario admin
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: scripts/createUsers.sql
+CAMBIO: Reemplazar hash de admin
+LÍNEA: Hash del usuario admin
+
+ANTES:
+  password: 'admin123' (sin hashear)
+
+DESPUÉS:
+  password: '$2a$10$IM7OHFw6Lc3icEI8cBaT8OtBwAIgUXVdGrC0JRv4FsTkslfgJaL/2'
+  (Hash bcrypt correcto con salt iterations: 10)
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 3: Orden de ejecución SQL incorrecta
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: scripts/createUsers.sql
+CAMBIO: Remover ALTER TABLE de movimientos de ubicación incorrecta
+LÍNEA: Removidas líneas de ALTER TABLE
+
+ANTES:
+  ALTER TABLE movimientos ADD CONSTRAINT fk_movimientos_usuarios
+  (en script incorrecto)
+
+DESPUÉS:
+  ALTER TABLE movimientos ADD CONSTRAINT fk_movimientos_usuarios
+  (en ubicación correcta después de crear la tabla)
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 4: Middleware order - req.body undefined
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: index.js
+LÍNEA: ~40-60 (área de middleware)
+
+ANTES:
+  app.use(cors());
+  app.use(express.static('public'));
+  app.use(express.json());
+  // rutas aquí
+
+DESPUÉS:
+  app.use(cors());
+  app.use(express.json());
+  app.use(express.static('public'));
+  // rutas aquí
+
+RAZÓN: bodyParser (express.json) debe ir ANTES de las rutas
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 5: addEventListener en elementos null
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/js/app.js
+CAMBIO: Refactorizar todos los event listeners en funciones
+
+ANTES:
+  document.getElementById('loginForm').addEventListener('submit', ...);
+  // Al cargar el script, loginForm aún no existe en el DOM
+
+DESPUÉS:
+  function setupLoginForm() {
+      const loginForm = document.getElementById('loginForm');
+      if (!loginForm) return;
+      loginForm.addEventListener('submit', async function(e) { ... });
+  }
+  
+  // Llamar en DOMContentLoaded:
+  document.addEventListener('DOMContentLoaded', async () => {
+      setupLoginForm();
+      setupMenuNavigation();
+      setupProductoForm();
+      setupCategoriaForm();
+      setupMovimientoForm();
+      setupEditProductoForm();
+      ...
+  });
+
+FUNCIONES CREADAS:
+  • setupLoginForm()
+  • setupMenuNavigation()
+  • setupProductoForm()
+  • setupCategoriaForm()
+  • setupMovimientoForm()
+  • setupEditProductoForm()
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 6: categoria_id con string vacío en lugar de null
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/js/app.js
+LÍNEA: ~300-350 (en setupProductoForm)
+
+ANTES:
+  const formData = new FormData(productoForm);
+  const data = Object.fromEntries(formData);
+  // categoria_id = "" (string vacío causa error SQL)
+
+DESPUÉS:
+  const formData = new FormData(productoForm);
+  let data = Object.fromEntries(formData);
+  
+  // Convertir valores vacíos a null
+  Object.keys(data).forEach(key => {
+      if (data[key] === '') data[key] = null;
+  });
+
+RESULTADO: Error SQL "invalid input syntax for type integer: """" resuelto
+
+════════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA 7: pdfkit no instalado en Docker
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: package.json
+LÍNEA: En dependencies
+
+CAMBIO: Agregar pdfkit
+ANTES:
+  No incluido en package.json
+
+DESPUÉS:
+  "dependencies": {
+    ...
+    "pdfkit": "^0.13.0"
+  }
+
+SOLUCIÓN: docker-compose build --no-cache para instalar en container
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 8: Nueva ruta para generar reportes PDF
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: index.js
+LÍNEA: 359-420 (nueva ruta)
+
+AGREGADO:
+  const PDFDocument = require('pdfkit');
+
+  app.get('/api/reportes/movimientos-pdf', verificarToken, verificarPermiso('ver_reportes'), async (req, res) => {
+    try {
+      const { tipo } = req.query;
+      
+      if (!tipo || !['ENTRADA', 'SALIDA'].includes(tipo)) {
+        return res.status(400).json({ error: 'Tipo de movimiento inválido' });
+      }
+
+      // Obtener movimientos con precios
+      const result = await pool.query(`
+        SELECT m.*, p.nombre as producto_nombre, p.sku, p.precio, u.nombre as usuario_nombre
+        FROM movimientos m 
+        JOIN productos p ON m.producto_id = p.id 
+        LEFT JOIN usuarios u ON m.usuario_id = u.id
+        WHERE m.tipo = $1
+        ORDER BY m.created_at DESC 
+      `, [tipo]);
+
+      const movimientos = result.rows;
+      const doc = new PDFDocument({ margin: 40 });
+      
+      // Headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte_${tipo}_${new Date().toISOString().split('T')[0]}.pdf"`);
+      doc.pipe(res);
+
+      // Título y contenido
+      doc.fontSize(24).font('Helvetica-Bold').text('Reporte de Movimientos', { align: 'center' });
+      
+      // Tabla con columnas: Fecha, Producto, SKU, Cantidad, Precio, Subtotal, Usuario
+      // ... código de generación de tabla ...
+      
+      // Totales
+      let totalCantidad = 0;
+      let totalValor = 0;
+      
+      movimientos.forEach((mov) => {
+        const precio = parseFloat(mov.precio) || 0;
+        const subtotal = mov.cantidad * precio;
+        totalCantidad += mov.cantidad;
+        totalValor += subtotal;
+      });
+
+      doc.font('Helvetica-Bold').fontSize(11);
+      doc.text(`Total de movimientos: ${movimientos.length}`, 40, doc.y);
+      doc.text(`Cantidad total: ${totalCantidad} unidades`, 40, doc.y);
+      doc.text(`Valor total: $${totalValor.toFixed(2)}`, 40, doc.y, { underline: true });
+
+      doc.end();
+    } catch (err) {
+      console.error('Error generando PDF:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 9: Crear sistema de variables CSS para Dark Mode
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: 1-30 (inicio del archivo)
+
+AGREGADO:
+  :root {
+    --primary-color: #667eea;
+    --primary-dark: #764ba2;
+    --bg-light: #f5f7fa;
+    --bg-white: #ffffff;
+    --text-dark: #333333;
+    --text-gray: #666666;
+    --text-light: #999999;
+    --border-color: #e0e0e0;
+    --border-light: #e5e7eb;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
+  }
+
+  body.dark-mode {
+    --bg-light: #1a1a2e;
+    --bg-white: #16213e;
+    --text-dark: #e0e0e0;
+    --text-gray: #b0b0b0;
+    --text-light: #808080;
+    --border-color: #2d3a5c;
+    --border-light: #2d3a5c;
+  }
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 10: Responsive Design - Media Queries
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: ~700-1070 (media queries)
+
+AGREGADO 4 BREAKPOINTS:
+
+1. @media (max-width: 1024px)
+   • Sidebar: 240px (reducido de 280px)
+   • Stats grid: minmax(150px, 1fr)
+   • Padding reducido
+
+2. @media (max-width: 768px)
+   • Dashboard: flex-direction: column (sidebar arriba, content abajo)
+   • Sidebar: width: 100%, flex-direction: row (horizontal)
+   • Sidebar-menu: scroll-x (horizontal scroll)
+   • Main-content: order: 1 (debajo del sidebar)
+   • Stats grid: minmax(120px, 1fr)
+   • Form grid: 1 columna
+
+3. @media (max-width: 480px)
+   • Font sizes aún más compactos
+   • Stats grid: 2 columnas
+   • Botones: width: 100%
+   • Inputs: width: 100%
+
+EJEMPLOS DE CAMBIOS:
+  • Login container: max-width: 450px, padding dinámico
+  • Font sizes: clamp(24px, 5vw, 32px)
+  • Tablas: font-size: 12px en tablets
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 11: Dark Mode Toggle Button en HTML
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/index.html
+LÍNEA: ~38-40 (sidebar header)
+
+ANTES:
+  <div class="sidebar-header">
+    <h2>📦 Inventario</h2>
+    <p>Panel de Control</p>
+  </div>
+
+DESPUÉS:
+  <div class="sidebar-header">
+    <h2>📦 Inventario</h2>
+    <button class="dark-mode-toggle" id="darkModeToggle" title="Cambiar tema">🌙</button>
+  </div>
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 12: Funciones de Dark Mode en JavaScript
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/js/app.js
+LÍNEA: 5-30 (inicio del archivo)
+
+AGREGADO:
+  // ========== DARK MODE ==========
+  function initDarkMode() {
+    // Verificar preferencia guardada o usar preferencia del sistema
+    const savedMode = localStorage.getItem('darkMode');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDarkMode = savedMode ? savedMode === 'true' : prefersDark;
+    
+    if (isDarkMode) {
+      document.body.classList.add('dark-mode');
+      updateDarkModeButton(true);
+    }
+  }
+
+  function toggleDarkMode() {
+    const isDarkMode = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('darkMode', isDarkMode);
+    updateDarkModeButton(isDarkMode);
+  }
+
+  function updateDarkModeButton(isDarkMode) {
+    const btn = document.getElementById('darkModeToggle');
+    if (btn) {
+      btn.textContent = isDarkMode ? '☀️' : '🌙';
+      btn.title = isDarkMode ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro';
+    }
+  }
+
+INTEGRACIÓN EN DOMContentLoaded:
+  document.addEventListener('DOMContentLoaded', async () => {
+    initDarkMode();
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    if (darkModeToggle) {
+      darkModeToggle.addEventListener('click', toggleDarkMode);
+    }
+    // ... resto del código ...
+  });
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 13: Reemplazar estilos inline por clases CSS
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: 1055-1080 (nuevas clases utilitarias)
+
+AGREGADO:
+  .text-gray { color: var(--text-gray); }
+  .text-light { color: var(--text-light); }
+  .btn-cancel { 
+    background: var(--border-light); 
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+  }
+  .form-section { 
+    background: var(--border-light); 
+    padding: 20px; 
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+  }
+  .form-title { 
+    margin-bottom: 15px; 
+    color: var(--text-dark);
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .form-group-row { 
+    display: flex; 
+    gap: 10px; 
+    margin-top: 15px;
+    flex-wrap: wrap;
+  }
+  .report-card { 
+    padding: 20px; 
+    background: var(--border-light); 
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s;
+  }
+  .grid-2col { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 20px;
+  }
+  .flex-gap { 
+    display: flex; 
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+CAMBIOS EN HTML (ejemplo):
+ARCHIVO: public/index.html
+ANTES:
+  <p style="margin-top: 20px; font-size: 12px; color: #999;">Usuario demo...</p>
+  <div style="background: #f9fafb; padding: 20px; border-radius: 10px;">
+
+DESPUÉS:
+  <p style="margin-top: 20px; font-size: 12px;" class="text-light">Usuario demo...</p>
+  <div class="form-section">
+
+LÍNEAS CAMBIADAS EN HTML:
+  • Línea 29: Cambiar color a class="text-light"
+  • Línea 71: Cambiar color a class="text-gray"
+  • Línea 132: form-section agregada
+  • Línea 167: btn-cancel agregada
+  • Línea 197: form-section agregada
+  • Línea 210: btn-cancel agregada
+  • Línea 235: form-section agregada
+  • Línea 286: grid-2col agregada
+  • Línea 287-289: report-card agregada
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 14: Mejorar Select de Categorías
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: 475-500
+
+ANTES:
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--bg-white);
+    color: var(--text-dark);
+    transition: all 0.3s;
+  }
+
+DESPUÉS:
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--bg-white);
+    color: var(--text-dark);
+    transition: all 0.3s;
+    font-family: inherit;
+  }
+
+  .form-group select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667eea' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 20px;
+    padding-right: 40px;
+  }
+
+  body.dark-mode .form-group select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e0e0e0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  }
+
+CAMBIOS:
+  • appearance: none (elimina estilo nativo del navegador)
+  • background-image con SVG de flecha
+  • Icono azul en light mode, blanco en dark mode
+  • padding-right: 40px para dejar espacio al icono
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 15: Corregir Layout Dashboard (Sidebar + Content)
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: 128-135
+
+ANTES:
+  .dashboard {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-light);
+    flex-direction: column;
+  }
+
+DESPUÉS:
+  .dashboard {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-light);
+    flex-direction: row;
+  }
+
+RAZÓN: En desktop debe ser ROW (sidebar izquierda, content derecha)
+       En mobile (768px) se cambia a COLUMN en media query
+
+════════════════════════════════════════════════════════════════════════════════════
+
+CAMBIO 16: Mejorar card-header para Tablets
+─────────────────────────────────────────────────────────────────────────────────
+ARCHIVO: public/css/styles.css
+LÍNEA: 745-760 (@media 1024px)
+
+ANTES:
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .search-box {
+    max-width: 100%;
+  }
+
+DESPUÉS:
+  .card-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .card-header h2 {
+    width: 100%;
+  }
+
+  .search-box {
+    max-width: 100%;
+    width: 100%;
+  }
+
+RAZÓN: Mejor distribución de elementos en tablets sin collapse total
+
+════════════════════════════════════════════════════════════════════════════════════
+
+RESUMEN DE ARCHIVOS MODIFICADOS
+═════════════════════════════════════════════════════════════════════════════════
+
+✅ index.js
+   • Línea 1: Agregar require('pdfkit')
+   • Línea 359-420: Agregar ruta GET /api/reportes/movimientos-pdf
+   • Cálculos de precios y totales
+   • Generación de PDF con tabla
+
+✅ package.json
+   • Agregar "pdfkit": "^0.13.0" en dependencies
+
+✅ public/css/styles.css
+   • Línea 1-30: Variables CSS (:root y body.dark-mode)
+   • Línea 128: Cambiar flex-direction: column → row
+   • Línea 475-500: Mejorar .form-group select
+   • Línea 700-1070: Media queries responsive
+   • Línea 745-760: Mejorar card-header
+   • Línea 1055-1080: Agregar 9 clases utilitarias
+
+✅ public/index.html
+   • Línea 38-40: Cambiar sidebar-header (agregar botón dark mode)
+   • Línea 29: Cambiar estilos inline por class="text-light"
+   • Línea 71: Cambiar estilos inline por class="text-gray"
+   • Línea 132: Cambiar form div por class="form-section"
+   • Línea 167: Agregar class="btn-cancel"
+   • Línea 197: Cambiar form-categoria por class="form-section"
+   • Línea 210: Agregar class="btn-cancel"
+   • Línea 235: Cambiar form-movimiento por class="form-section"
+   • Línea 286: Cambiar grid por class="grid-2col"
+   • Línea 287-295: Cambiar divs por class="report-card"
+
+✅ public/js/app.js
+   • Línea 5-30: Agregar funciones dark mode (initDarkMode, toggleDarkMode, updateDarkModeButton)
+   • Línea 145-200: Refactorizar setupLoginForm, setupMenuNavigation, etc.
+   • Línea 300-350: Agregar validación de datos (convertir vacíos a null)
+   • Línea 672-706: Integrar initDarkMode en DOMContentLoaded
+   • Agregar event listener para darkModeToggle
+
+════════════════════════════════════════════════════════════════════════════════════
+
+FUNCIONALIDADES IMPLEMENTADAS
+═════════════════════════════════════════════════════════════════════════════════
+
+✅ Autenticación JWT con persistencia
+✅ CRUD completo de productos, categorías, movimientos
+✅ Reportes PDF con tabla dinámica y cálculos
+✅ Sistema completo de Dark Mode con persistencia
+✅ Responsive Design para desktop, tablet y móvil
+✅ Select de categorías personalizado con icono
+✅ Validación de datos en frontend y backend
+✅ Manejo de errores robusto
+✅ Toast notifications para feedback
+✅ Modal para selección de tipo de reporte
+
+════════════════════════════════════════════════════════════════════════════════════
+
+ESTADO FINAL: ✅ SISTEMA COMPLETAMENTE FUNCIONAL Y OPTIMIZADO
+
+════════════════════════════════════════════════════════════════════════════════════

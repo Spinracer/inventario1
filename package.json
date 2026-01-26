@@ -23,7 +23,8 @@
     "passport-local": "^1.0.0",
     "passport-google-oauth20": "^2.0.0",
     "express-session": "^1.17.3",
-    "cookie-parser": "^1.4.6"
+    "cookie-parser": "^1.4.6",
+    "pdfkit": "^0.13.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

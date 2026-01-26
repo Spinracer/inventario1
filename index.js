@@ -4,6 +4,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+const PDFDocument = require('pdfkit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -350,6 +351,111 @@ app.get('/api/reportes/stock-bajo', verificarToken, verificarPermiso('ver_report
     `);
     res.json(result.rows);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generar PDF de Movimientos (Entrada o Salida)
+app.get('/api/reportes/movimientos-pdf', verificarToken, verificarPermiso('ver_reportes'), async (req, res) => {
+  try {
+    const { tipo } = req.query;
+    
+    if (!tipo || !['ENTRADA', 'SALIDA'].includes(tipo)) {
+      return res.status(400).json({ error: 'Tipo de movimiento inválido. Use ENTRADA o SALIDA' });
+    }
+
+    // Obtener movimientos con precios
+    const result = await pool.query(`
+      SELECT m.*, p.nombre as producto_nombre, p.sku, p.precio, u.nombre as usuario_nombre
+      FROM movimientos m 
+      JOIN productos p ON m.producto_id = p.id 
+      LEFT JOIN usuarios u ON m.usuario_id = u.id
+      WHERE m.tipo = $1
+      ORDER BY m.created_at DESC 
+    `, [tipo]);
+
+    const movimientos = result.rows;
+
+    // Crear PDF
+    const doc = new PDFDocument({ margin: 40 });
+    
+    // Headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte_${tipo}_${new Date().toISOString().split('T')[0]}.pdf"`);
+    doc.pipe(res);
+
+    // Título
+    doc.fontSize(24).font('Helvetica-Bold').text('Reporte de Movimientos', { align: 'center' });
+    doc.fontSize(14).font('Helvetica').text(tipo === 'ENTRADA' ? 'Productos Ingresados' : 'Productos Salidos', { align: 'center' });
+    doc.fontSize(10).text(`Fecha de generación: ${new Date().toLocaleString()}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Tabla headers
+    const y = doc.y;
+    const colWidths = {
+      fecha: 80,
+      producto: 100,
+      sku: 60,
+      cantidad: 60,
+      precio: 70,
+      subtotal: 80,
+      usuario: 80
+    };
+
+    doc.font('Helvetica-Bold').fontSize(10);
+    doc.text('Fecha', 40, y);
+    doc.text('Producto', 40 + colWidths.fecha, y);
+    doc.text('SKU', 40 + colWidths.fecha + colWidths.producto, y);
+    doc.text('Cant.', 40 + colWidths.fecha + colWidths.producto + colWidths.sku, y);
+    doc.text('P. Unit.', 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad, y);
+    doc.text('Subtotal', 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad + colWidths.precio, y);
+    doc.text('Usuario', 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad + colWidths.precio + colWidths.subtotal, y);
+
+    // Línea separadora
+    doc.moveTo(40, doc.y + 12).lineTo(550, doc.y + 12).stroke();
+    doc.moveDown(1);
+
+    // Datos
+    doc.font('Helvetica').fontSize(9);
+    let totalCantidad = 0;
+    let totalValor = 0;
+
+    movimientos.forEach((mov) => {
+      const fecha = new Date(mov.created_at).toLocaleDateString('es-ES');
+      const precio = parseFloat(mov.precio) || 0;
+      const subtotal = mov.cantidad * precio;
+      totalCantidad += mov.cantidad;
+      totalValor += subtotal;
+      
+      if (doc.y > 700) {
+        doc.addPage();
+      }
+
+      doc.text(fecha, 40, doc.y, { width: colWidths.fecha });
+      doc.text(mov.producto_nombre.substring(0, 15), 40 + colWidths.fecha, doc.y - 13, { width: colWidths.producto });
+      doc.text(mov.sku || '-', 40 + colWidths.fecha + colWidths.producto, doc.y - 13, { width: colWidths.sku });
+      doc.text(mov.cantidad.toString(), 40 + colWidths.fecha + colWidths.producto + colWidths.sku, doc.y - 13, { width: colWidths.cantidad, align: 'right' });
+      doc.text(`$${precio.toFixed(2)}`, 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad, doc.y - 13, { width: colWidths.precio, align: 'right' });
+      doc.text(`$${subtotal.toFixed(2)}`, 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad + colWidths.precio, doc.y - 13, { width: colWidths.subtotal, align: 'right' });
+      doc.text(mov.usuario_nombre || 'Sistema', 40 + colWidths.fecha + colWidths.producto + colWidths.sku + colWidths.cantidad + colWidths.precio + colWidths.subtotal, doc.y - 13, { width: colWidths.usuario });
+      
+      doc.moveDown(1.8);
+    });
+
+    // Línea separadora final
+    doc.moveTo(40, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown(0.8);
+
+    // Totales
+    doc.font('Helvetica-Bold').fontSize(11);
+    doc.text(`Total de movimientos: ${movimientos.length}`, 40, doc.y);
+    doc.text(`Cantidad total: ${totalCantidad} unidades`, 40, doc.y);
+    doc.text(`Valor total: $${totalValor.toFixed(2)}`, 40, doc.y, { underline: true });
+
+    // Finalizar PDF
+    doc.end();
+  } catch (err) {
+    console.error('Error generando PDF:', err);
     res.status(500).json({ error: err.message });
   }
 });

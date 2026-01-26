@@ -3,6 +3,33 @@ let currentUser = null;
 let authToken = null;
 let userPermissions = {};
 
+// ========== DARK MODE ==========
+function initDarkMode() {
+    // Verificar preferencia guardada o usar preferencia del sistema
+    const savedMode = localStorage.getItem('darkMode');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDarkMode = savedMode ? savedMode === 'true' : prefersDark;
+    
+    if (isDarkMode) {
+        document.body.classList.add('dark-mode');
+        updateDarkModeButton(true);
+    }
+}
+
+function toggleDarkMode() {
+    const isDarkMode = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('darkMode', isDarkMode);
+    updateDarkModeButton(isDarkMode);
+}
+
+function updateDarkModeButton(isDarkMode) {
+    const btn = document.getElementById('darkModeToggle');
+    if (btn) {
+        btn.textContent = isDarkMode ? '☀️' : '🌙';
+        btn.title = isDarkMode ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro';
+    }
+}
+
 // ========== SISTEMA DE NOTIFICACIONES TOAST ==========
 function showToast(message, type = 'info', title = '') {
     const container = document.getElementById('toastContainer');
@@ -603,8 +630,64 @@ function setupMovimientoForm() {
 }
 
 // ========== REPORTES ==========
-function generarReporteInventario() {
-    window.open(`${API_URL}/productos`, '_blank');
+function abrirModalReporteMovimientos() {
+    const modal = document.getElementById('modalReporteMovimientos');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function cerrarModalReporteMovimientos() {
+    const modal = document.getElementById('modalReporteMovimientos');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function generarReportePDF(tipo) {
+    if (!tipo || !['ENTRADA', 'SALIDA'].includes(tipo)) {
+        showToast('Tipo de reporte inválido', 'error');
+        return;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+        showToast('No hay sesión activa', 'warning');
+        return;
+    }
+
+    // Crear un iframe temporal para descargar el PDF
+    const link = document.createElement('a');
+    link.href = `${API_URL}/reportes/movimientos-pdf?tipo=${tipo}`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    
+    // Necesitamos usar fetch para incluir el token en el header
+    fetchAuth(`${API_URL}/reportes/movimientos-pdf?tipo=${tipo}`)
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            } else {
+                throw new Error('Error al generar reporte');
+            }
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `reporte_${tipo}_${new Date().toISOString().split('T')[0]}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+            
+            showToast(`Reporte de ${tipo} generado exitosamente`, 'success');
+            cerrarModalReporteMovimientos();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error al generar el reporte PDF', 'error');
+        });
 }
 
 function verStockBajo() {
@@ -615,6 +698,13 @@ function verStockBajo() {
 // Verificar autenticación al cargar la página
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('📱 DOM Completamente cargado');
+    
+    // Inicializar dark mode
+    initDarkMode();
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    if (darkModeToggle) {
+        darkModeToggle.addEventListener('click', toggleDarkMode);
+    }
     
     // Configurar todos los event listeners
     setupLoginForm();

@@ -26,7 +26,7 @@
             <button type="submit" class="btn-login">Iniciar Sesión</button>
         </form>
         
-        <p style="margin-top: 20px; font-size: 12px; color: #999;">
+        <p style="margin-top: 20px; font-size: 12px;" class="text-light;">
             Usuario demo: <strong>admin@inventario.com</strong> | Contraseña: <strong>admin123</strong>
         </p>
     </div>
@@ -37,7 +37,7 @@
         <div class="sidebar">
             <div class="sidebar-header">
                 <h2>📦 Inventario</h2>
-                <p>Panel de Control</p>
+                <button class="dark-mode-toggle" id="darkModeToggle" title="Cambiar tema">🌙</button>
             </div>
             
             <div class="sidebar-menu">
@@ -68,8 +68,8 @@
                 <div class="user-info">
                     <div class="user-avatar">A</div>
                     <div>
-                        <div style="font-weight: 600;">Admin</div>
-                        <div style="font-size: 12px; color: #666;">Administrador</div>
+                        <div style="font-weight: 600; color: var(--text-dark);">Admin</div>
+                        <div style="font-size: 12px;" class="text-gray">Administrador</div>
                     </div>
                 </div>
             </div>
@@ -123,14 +123,14 @@
                 <div class="card">
                     <div class="card-header">
                         <h2>Gestión de Productos</h2>
-                        <div style="display: flex; gap: 10px;">
+                        <div class="flex-gap">
                             <input type="text" class="search-box" id="searchProductos" placeholder="🔍 Buscar productos...">
                             <button class="btn btn-primary" onclick="mostrarFormProducto()">+ Nuevo Producto</button>
                         </div>
                     </div>
 
-                    <div id="formProducto" class="hidden" style="margin-bottom: 20px; padding: 20px; background: #f9fafb; border-radius: 10px;">
-                        <h3 style="margin-bottom: 15px;">Agregar Producto</h3>
+                    <div id="formProducto" class="hidden form-section">
+                        <h3 class="form-title">Agregar Producto</h3>
                         <form id="productoForm">
                             <div class="form-grid">
                                 <div class="form-group">
@@ -162,9 +162,9 @@
                                 <label>Descripción</label>
                                 <textarea name="descripcion" rows="3"></textarea>
                             </div>
-                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <div class="form-group-row">
                                 <button type="submit" class="btn btn-success">Guardar</button>
-                                <button type="button" class="btn" onclick="ocultarFormProducto()" style="background: #e5e7eb;">Cancelar</button>
+                                <button type="button" class="btn btn-cancel" onclick="ocultarFormProducto()">Cancelar</button>
                             </div>
                         </form>
                     </div>
@@ -194,8 +194,8 @@
                         <button class="btn btn-primary" onclick="mostrarFormCategoria()">+ Nueva Categoría</button>
                     </div>
 
-                    <div id="formCategoria" class="hidden" style="margin-bottom: 20px; padding: 20px; background: #f9fafb; border-radius: 10px;">
-                        <h3 style="margin-bottom: 15px;">Agregar Categoría</h3>
+                    <div id="formCategoria" class="hidden form-section">
+                        <h3 class="form-title">Agregar Categoría</h3>
                         <form id="categoriaForm">
                             <div class="form-group">
                                 <label>Nombre</label>
@@ -205,9 +205,9 @@
                                 <label>Descripción</label>
                                 <textarea name="descripcion" rows="3"></textarea>
                             </div>
-                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <div class="form-group-row">
                                 <button type="submit" class="btn btn-success">Guardar</button>
-                                <button type="button" class="btn" onclick="ocultarFormCategoria()" style="background: #e5e7eb;">Cancelar</button>
+                                <button type="button" class="btn btn-cancel" onclick="ocultarFormCategoria()">Cancelar</button>
                             </div>
                         </form>
                     </div>
@@ -232,7 +232,7 @@
                     <div class="card-header">
                         <h2>Registrar Movimiento</h2>
                     </div>
-                    <form id="movimientoForm" style="background: #f9fafb; padding: 20px; border-radius: 10px;">
+                    <form id="movimientoForm" class="form-section">
                         <div class="form-grid">
                             <div class="form-group">
                                 <label>Producto</label>
@@ -283,15 +283,15 @@
                     <div class="card-header">
                         <h2>Reportes del Sistema</h2>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
-                        <div style="padding: 20px; background: #f9fafb; border-radius: 10px;">
-                            <h3 style="margin-bottom: 10px;">📊 Reporte de Inventario</h3>
-                            <p style="color: #666; margin-bottom: 15px;">Genera un reporte completo del inventario actual</p>
-                            <button class="btn btn-primary" onclick="generarReporteInventario()">Generar Reporte</button>
+                    <div class="grid-2col">
+                        <div class="report-card">
+                            <h3>📊 Reporte de Movimientos</h3>
+                            <p>Genera un reporte en PDF de productos ingresados o salidos</p>
+                            <button class="btn btn-primary" onclick="abrirModalReporteMovimientos()">Generar Reporte PDF</button>
                         </div>
-                        <div style="padding: 20px; background: #f9fafb; border-radius: 10px;">
-                            <h3 style="margin-bottom: 10px;">⚠️ Stock Bajo</h3>
-                            <p style="color: #666; margin-bottom: 15px;">Lista de productos con stock bajo o crítico</p>
+                        <div class="report-card">
+                            <h3>⚠️ Stock Bajo</h3>
+                            <p>Lista de productos con stock bajo o crítico</p>
                             <button class="btn btn-primary" onclick="verStockBajo()">Ver Reporte</button>
                         </div>
                     </div>
@@ -352,6 +352,26 @@
                     <button type="button" class="btn" onclick="cerrarModalEditarProducto()" style="background: #e5e7eb;">Cancelar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL REPORTE MOVIMIENTOS -->
+    <div id="modalReporteMovimientos" class="modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="margin-bottom: 20px; text-align: center;">Selecciona Tipo de Reporte</h2>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn btn-success" style="padding: 12px; font-size: 14px; border: none; cursor: pointer;" onclick="generarReportePDF('ENTRADA')">
+                    📥 Reporte de Ingresos (Entrada)
+                </button>
+                <button class="btn btn-warning" style="padding: 12px; font-size: 14px; border: none; cursor: pointer; background: #f59e0b; color: white;" onclick="generarReportePDF('SALIDA')">
+                    📤 Reporte de Salidas
+                </button>
+            </div>
+            
+            <button class="btn" style="width: 100%; margin-top: 15px; padding: 10px; background: #e5e7eb; border: none; cursor: pointer; border-radius: 5px;" onclick="cerrarModalReporteMovimientos()">
+                Cancelar
+            </button>
         </div>
     </div>
 </body>
