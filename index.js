@@ -2,28 +2,33 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { Pool } = require('pg');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Importar configuración de base de datos
+const { pool } = require('./config/database');
+
+// Importar middleware de autenticación
+const { verificarToken, verificarPermiso } = require('./middleware/auth');
+
+// Importar rutas
+const authRoutes = require('./routes/auth');
+const usuariosRoutes = require('./routes/usuarios');
+
+// Middleware ANTES de las rutas
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Servir archivos estáticos (Frontend)
-app.use(express.static('public'));
+// Servir archivos estáticos
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Configuración de la base de datos
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
-
+// Registrar rutas de autenticación
+app.use('/api/auth', authRoutes);
+app.use('/api/usuarios', usuariosRoutes);
 // Verificar conexión a la base de datos
 pool.connect((err, client, release) => {
   if (err) {
@@ -110,7 +115,7 @@ app.get('/api', (req, res) => {
 
 // ========== CATEGORÍAS ==========
 
-// Listar todas las categorías
+// Listar todas las categorías (público)
 app.get('/api/categorias', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM categorias ORDER BY nombre');
@@ -120,8 +125,8 @@ app.get('/api/categorias', async (req, res) => {
   }
 });
 
-// Crear categoría
-app.post('/api/categorias', async (req, res) => {
+// Crear categoría (requiere autenticación)
+app.post('/api/categorias', verificarToken, verificarPermiso('crear_categorias'), async (req, res) => {
   const { nombre, descripcion } = req.body;
   try {
     const result = await pool.query(
@@ -172,12 +177,26 @@ app.get('/api/productos/:id', verificarToken, verificarPermiso('ver_productos'),
 app.post('/api/productos', verificarToken, verificarPermiso('crear_productos'), async (req, res) => {
   const { nombre, descripcion, sku, precio, stock, stock_minimo, categoria_id } = req.body;
   try {
+    // Validaciones básicas
+    if (!nombre || !sku || !precio) {
+      return res.status(400).json({ error: 'Faltan datos requeridos: nombre, sku, precio' });
+    }
+    
     const result = await pool.query(
       'INSERT INTO productos (nombre, descripcion, sku, precio, stock, stock_minimo, categoria_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [nombre, descripcion, sku, precio, stock || 0, stock_minimo || 0, categoria_id]
+      [
+        nombre, 
+        descripcion || null, 
+        sku, 
+        precio, 
+        stock || 0, 
+        stock_minimo || 0, 
+        categoria_id || null
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error('Error al crear producto:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -188,13 +207,22 @@ app.put('/api/productos/:id', verificarToken, verificarPermiso('editar_productos
   try {
     const result = await pool.query(
       'UPDATE productos SET nombre = $1, descripcion = $2, precio = $3, stock_minimo = $4, categoria_id = $5, activo = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-      [nombre, descripcion, precio, stock_minimo, categoria_id, activo, req.params.id]
+      [
+        nombre, 
+        descripcion || null, 
+        precio, 
+        stock_minimo || 0, 
+        categoria_id || null, 
+        activo, 
+        req.params.id
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
     res.json(result.rows[0]);
   } catch (err) {
+    console.error('Error al actualizar producto:', err);
     res.status(500).json({ error: err.message });
   }
 });

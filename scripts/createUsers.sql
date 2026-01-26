@@ -98,17 +98,12 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_google_id ON usuarios(google_id);
 CREATE INDEX IF NOT EXISTS idx_sesiones_token ON sesiones(token);
 CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones(usuario_id);
 
--- Modificar tabla movimientos para agregar usuario que realizó la acción
-ALTER TABLE movimientos 
-ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id),
-ADD COLUMN IF NOT EXISTS observaciones TEXT;
-
 -- Crear usuario admin por defecto (password: admin123)
 -- Hash bcrypt de "admin123"
 INSERT INTO usuarios (email, password_hash, nombre, rol_id, activo) 
 VALUES (
     'admin@inventario.com',
-    '$2a$10$rOzJQjYgdXhAkVMBL.nJlO7V7V3P8Z8K1qHxQqCxGJXXQQMQQQMQQ',
+    '$2a$10$IM7OHFw6Lc3icEI8cBaT8OtBwAIgUXVdGrC0JRv4FsTkslfgJaL/2',
     'Administrador',
     1,
     true

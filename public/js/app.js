@@ -44,12 +44,22 @@ function showToast(message, type = 'info', title = '') {
 // ========== AUTENTICACIÓN Y TOKEN ==========
 function setAuthToken(token) {
     authToken = token;
-    localStorage.setItem('authToken', token);
+    try {
+        localStorage.setItem('authToken', token);
+        console.log('✅ Token guardado en localStorage');
+    } catch (e) {
+        console.error('⚠️ Error guardando token en localStorage:', e);
+    }
 }
 
 function getAuthToken() {
     if (!authToken) {
-        authToken = localStorage.getItem('authToken');
+        try {
+            authToken = localStorage.getItem('authToken');
+            console.log('📍 Token recuperado de localStorage:', authToken ? 'Sí' : 'No');
+        } catch (e) {
+            console.error('⚠️ Error leyendo localStorage:', e);
+        }
     }
     return authToken;
 }
@@ -66,6 +76,9 @@ async function fetchAuth(url, options = {}) {
     const token = getAuthToken();
     
     if (!token) {
+        clearAuth();
+        mostrarLogin();
+        showToast('No hay sesión activa. Por favor inicia sesión.', 'warning');
         throw new Error('No hay token de autenticación');
     }
     
@@ -75,17 +88,22 @@ async function fetchAuth(url, options = {}) {
         ...options.headers
     };
     
-    const response = await fetch(url, { ...options, headers });
-    
-    // Si el token expiró, redirigir al login
-    if (response.status === 401) {
-        clearAuth();
-        mostrarLogin();
-        showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
-        throw new Error('Token expirado');
+    try {
+        const response = await fetch(url, { ...options, headers });
+        
+        // Si el token expiró o no es válido, limpiar sesión
+        if (response.status === 401) {
+            clearAuth();
+            mostrarLogin();
+            showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
+            throw new Error('Token expirado o inválido');
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('Error en fetchAuth:', error);
+        throw error;
     }
-    
-    return response;
 }
 
 // Verificar autenticación al cargar
@@ -93,25 +111,29 @@ async function verificarAutenticacion() {
     const token = getAuthToken();
     
     if (!token) {
+        console.log('❌ No hay token en localStorage');
         mostrarLogin();
         return false;
     }
     
     try {
+        console.log('🔐 Verificando token con el servidor...');
         const response = await fetchAuth(`${API_URL}/auth/verificar`);
         
         if (response.ok) {
             const data = await response.json();
             currentUser = data.usuario;
             userPermissions = data.permisos;
+            console.log('✅ Autenticación válida para:', currentUser.email);
             return true;
         } else {
+            console.log('❌ Respuesta no OK:', response.status);
             clearAuth();
             mostrarLogin();
             return false;
         }
     } catch (error) {
-        console.error('Error verificando autenticación:', error);
+        console.error('❌ Error verificando autenticación:', error);
         clearAuth();
         mostrarLogin();
         return false;
@@ -129,36 +151,52 @@ function mostrarDashboard() {
 }
 
 // ========== LOGIN ==========
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const email = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        const response = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            setAuthToken(data.token);
-            currentUser = data.usuario;
-            userPermissions = data.permisos;
-            
-            mostrarDashboard();
-            showToast(`Bienvenido ${data.usuario.nombre}`, 'success');
-            cargarDashboard();
-        } else {
-            showToast(data.mensaje || 'Credenciales incorrectas', 'error');
-        }
-    } catch (error) {
-        console.error('Error en login:', error);
-        showToast('Error al iniciar sesión', 'error');
+function setupLoginForm() {
+    const loginForm = document.getElementById('loginForm');
+    if (!loginForm) {
+        console.error('❌ Elemento loginForm no encontrado');
+        return;
     }
-});
+    
+    loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const email = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            console.log('🔐 Intentando login con:', email);
+            const response = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                console.log('✅ Login exitoso');
+                setAuthToken(data.token);
+                currentUser = data.usuario;
+                userPermissions = data.permisos;
+                
+                console.log('📌 Datos guardados:', {
+                    usuario: currentUser.email,
+                    token: data.token ? data.token.substring(0, 20) + '...' : 'Sin token'
+                });
+                
+                mostrarDashboard();
+                showToast(`Bienvenido ${data.usuario.nombre}`, 'success');
+                cargarDashboard();
+            } else {
+                console.log('❌ Login fallido:', data.mensaje);
+                showToast(data.mensaje || 'Credenciales incorrectas', 'error');
+            }
+        } catch (error) {
+            console.error('Error en login:', error);
+            showToast('Error al iniciar sesión', 'error');
+        }
+    });
+}
 
 // ========== LOGOUT ==========
 async function logout() {
@@ -174,29 +212,37 @@ async function logout() {
 }
 
 // ========== MENU NAVIGATION ==========
-document.querySelectorAll('.menu-item').forEach(item => {
-    item.addEventListener('click', function() {
-        document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
-        this.classList.add('active');
-        
-        const section = this.dataset.section;
-        document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
-        document.getElementById('section-' + section).classList.add('active');
-        
-        const titles = {
-            dashboard: 'Dashboard',
-            productos: 'Gestión de Productos',
-            categorias: 'Gestión de Categorías',
-            movimientos: 'Movimientos de Inventario',
-            reportes: 'Reportes'
-        };
-        document.getElementById('pageTitle').textContent = titles[section];
+function setupMenuNavigation() {
+    const menuItems = document.querySelectorAll('.menu-item');
+    if (menuItems.length === 0) {
+        console.error('❌ No se encontraron elementos .menu-item');
+        return;
+    }
+    
+    menuItems.forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            const section = this.dataset.section;
+            document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+            document.getElementById('section-' + section).classList.add('active');
+            
+            const titles = {
+                dashboard: 'Dashboard',
+                productos: 'Gestión de Productos',
+                categorias: 'Gestión de Categorías',
+                movimientos: 'Movimientos de Inventario',
+                reportes: 'Reportes'
+            };
+            document.getElementById('pageTitle').textContent = titles[section];
 
-        if (section === 'productos') cargarProductos();
-        if (section === 'categorias') cargarCategorias();
-        if (section === 'movimientos') cargarMovimientos();
+            if (section === 'productos') cargarProductos();
+            if (section === 'categorias') cargarCategorias();
+            if (section === 'movimientos') cargarMovimientos();
+        });
     });
-});
+}
 
 // ========== DASHBOARD ==========
 async function cargarDashboard() {
@@ -303,37 +349,52 @@ function cerrarModalEditarProducto() {
 }
 
 // Submit editar producto
-document.getElementById('formEditarProducto').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const id = document.getElementById('editProductoId').value;
-    const data = {
-        nombre: document.getElementById('editNombre').value,
-        descripcion: document.getElementById('editDescripcion').value,
-        precio: parseFloat(document.getElementById('editPrecio').value),
-        stock_minimo: parseInt(document.getElementById('editStockMinimo').value),
-        categoria_id: document.getElementById('editCategoria').value || null,
-        activo: document.getElementById('editActivo').value === 'true'
-    };
-
-    try {
-        const response = await fetchAuth(`${API_URL}/productos/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            showToast('Producto actualizado exitosamente', 'success');
-            cerrarModalEditarProducto();
-            cargarProductos();
-            cargarDashboard();
-        } else {
-            showToast('Error al actualizar producto', 'error');
-        }
-    } catch (error) {
-        showToast('Error al actualizar producto', 'error');
+function setupEditProductoForm() {
+    const formEditarProducto = document.getElementById('formEditarProducto');
+    if (!formEditarProducto) {
+        console.error('❌ Elemento formEditarProducto no encontrado');
+        return;
     }
-});
+    
+    formEditarProducto.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const id = document.getElementById('editProductoId').value;
+        const data = {
+            nombre: document.getElementById('editNombre').value,
+            descripcion: document.getElementById('editDescripcion').value,
+            precio: parseFloat(document.getElementById('editPrecio').value),
+            stock_minimo: parseInt(document.getElementById('editStockMinimo').value),
+            categoria_id: document.getElementById('editCategoria').value || null,
+            activo: document.getElementById('editActivo').value === 'true'
+        };
+
+        try {
+            const response = await fetchAuth(`${API_URL}/productos/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('Producto actualizado exitosamente', 'success');
+                cerrarModalEditarProducto();
+                cargarProductos();
+                cargarDashboard();
+            } else if (response.status === 401) {
+                clearAuth();
+                mostrarLogin();
+                showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
+            } else {
+                showToast('Error al actualizar producto', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (!error.message.includes('Token')) {
+                showToast('Error al actualizar producto', 'error');
+            }
+        }
+    });
+}
 
 // ========== CATEGORÍAS ==========
 async function cargarCategorias() {
@@ -412,93 +473,134 @@ function ocultarFormCategoria() {
 // ========== SUBMIT FORMS ==========
 
 // Submit Producto
-document.getElementById('productoForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const response = await fetchAuth(`${API_URL}/productos`, {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            showToast('Producto creado exitosamente', 'success');
-            ocultarFormProducto();
-            cargarProductos();
-            cargarDashboard();
-        } else {
-            const error = await response.json();
-            showToast(error.mensaje || 'Error al crear producto', 'error');
-        }
-    } catch (error) {
-        showToast('Error al crear producto', 'error');
+function setupProductoForm() {
+    const productoForm = document.getElementById('productoForm');
+    if (!productoForm) {
+        console.error('❌ Elemento productoForm no encontrado');
+        return;
     }
-});
+    
+    productoForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        
+        // Convertir valores numéricos y manejar categoría_id vacía
+        data.stock = parseInt(data.stock) || 0;
+        data.stock_minimo = parseInt(data.stock_minimo) || 0;
+        data.precio = parseFloat(data.precio) || 0;
+        data.categoria_id = data.categoria_id ? parseInt(data.categoria_id) : null;
+
+        try {
+            const response = await fetchAuth(`${API_URL}/productos`, {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('Producto creado exitosamente', 'success');
+                ocultarFormProducto();
+                cargarProductos();
+                cargarDashboard();
+            } else if (response.status === 401) {
+                clearAuth();
+                mostrarLogin();
+                showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
+            } else {
+                const error = await response.json();
+                showToast(error.mensaje || error.error || 'Error al crear producto', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (!error.message.includes('Token')) {
+                showToast('Error al crear producto: ' + error.message, 'error');
+            }
+        }
+    });
+}
 
 // Submit Categoría
-document.getElementById('categoriaForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const response = await fetchAuth(`${API_URL}/categorias`, {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            showToast('Categoría creada exitosamente', 'success');
-            ocultarFormCategoria();
-            cargarCategorias();
-            cargarDashboard();
-        } else {
-            const error = await response.json();
-            showToast(error.mensaje || 'Error al crear categoría', 'error');
-        }
-    } catch (error) {
-        showToast('Error al crear categoría', 'error');
+function setupCategoriaForm() {
+    const categoriaForm = document.getElementById('categoriaForm');
+    if (!categoriaForm) {
+        console.error('❌ Elemento categoriaForm no encontrado');
+        return;
     }
-});
+    
+    categoriaForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+
+        try {
+            const response = await fetchAuth(`${API_URL}/categorias`, {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('Categoría creada exitosamente', 'success');
+                ocultarFormCategoria();
+                cargarCategorias();
+                cargarDashboard();
+            } else if (response.status === 401) {
+                clearAuth();
+                mostrarLogin();
+                showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
+            } else {
+                const error = await response.json();
+                showToast(error.mensaje || 'Error al crear categoría', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (!error.message.includes('Token')) {
+                showToast('Error al crear categoría', 'error');
+            }
+        }
+    });
+}
 
 // Submit Movimiento
-document.getElementById('movimientoForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData);
-
-    try {
-        const tipo = data.tipo.toLowerCase();
-        const response = await fetchAuth(`${API_URL}/movimientos/${tipo}`, {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            showToast('Movimiento registrado exitosamente', 'success');
-            this.reset();
-            cargarMovimientos();
-            cargarDashboard();
-        } else {
-            const error = await response.json();
-            showToast(error.mensaje || error.error, 'error');
-        }
-    } catch (error) {
-        showToast('Error al registrar movimiento', 'error');
+function setupMovimientoForm() {
+    const movimientoForm = document.getElementById('movimientoForm');
+    if (!movimientoForm) {
+        console.error('❌ Elemento movimientoForm no encontrado');
+        return;
     }
-});
+    
+    movimientoForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
 
-// ========== BÚSQUEDA ==========
-document.getElementById('searchProductos').addEventListener('input', function(e) {
-    const search = e.target.value.toLowerCase();
-    const rows = document.querySelectorAll('#productosTable tbody tr');
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(search) ? '' : 'none';
+        try {
+            const tipo = data.tipo.toLowerCase();
+            const response = await fetchAuth(`${API_URL}/movimientos/${tipo}`, {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('Movimiento registrado exitosamente', 'success');
+                this.reset();
+                cargarMovimientos();
+                cargarDashboard();
+            } else if (response.status === 401) {
+                clearAuth();
+                mostrarLogin();
+                showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'warning');
+            } else {
+                const error = await response.json();
+                showToast(error.mensaje || error.error, 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (!error.message.includes('Token')) {
+                showToast('Error al registrar movimiento', 'error');
+            }
+        }
     });
-});
+}
 
 // ========== REPORTES ==========
 function generarReporteInventario() {
@@ -512,6 +614,30 @@ function verStockBajo() {
 // ========== INICIALIZACIÓN ==========
 // Verificar autenticación al cargar la página
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📱 DOM Completamente cargado');
+    
+    // Configurar todos los event listeners
+    setupLoginForm();
+    setupMenuNavigation();
+    setupProductoForm();
+    setupCategoriaForm();
+    setupMovimientoForm();
+    setupEditProductoForm();
+    
+    // Setup búsqueda
+    const searchProductos = document.getElementById('searchProductos');
+    if (searchProductos) {
+        searchProductos.addEventListener('input', function(e) {
+            const search = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#productosTable tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        });
+    }
+    
+    // Verificar autenticación
     const autenticado = await verificarAutenticacion();
     
     if (autenticado) {

@@ -34,6 +34,7 @@ const verificarToken = async (req, res, next) => {
     req.usuario = result.rows[0];
     next();
   } catch (error) {
+    console.error('Error en verificarToken:', error.message);
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ 
         error: 'Token expirado',
