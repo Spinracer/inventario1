@@ -200,6 +200,12 @@ document.getElementById('productoForm').addEventListener('submit', async functio
     const formData = new FormData(this);
     const data = Object.fromEntries(formData);
 
+    // Convertir valores numéricos
+    if (data.precio !== undefined) data.precio = parseFloat(data.precio);
+    if (data.stock !== undefined) data.stock = parseInt(data.stock);
+    if (data.stock_minimo !== undefined) data.stock_minimo = parseInt(data.stock_minimo);
+    if (data.categoria_id !== undefined) data.categoria_id = parseInt(data.categoria_id);
+
     try {
         const response = await fetch(`${API_URL}/productos`, {
             method: 'POST',
@@ -251,6 +257,10 @@ document.getElementById('movimientoForm').addEventListener('submit', async funct
     e.preventDefault();
     const formData = new FormData(this);
     const data = Object.fromEntries(formData);
+
+    // Convertir valores numéricos
+    if (data.producto_id !== undefined) data.producto_id = parseInt(data.producto_id);
+    if (data.cantidad !== undefined) data.cantidad = parseInt(data.cantidad);
 
     try {
         const tipo = data.tipo.toLowerCase();
