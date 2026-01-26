@@ -12,6 +12,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Servir archivos estáticos (Frontend)
 app.use(express.static('public'));
 
 // Configuración de la base de datos
@@ -37,6 +38,15 @@ pool.connect((err, client, release) => {
 const initDb = async () => {
   const client = await pool.connect();
   try {
+    // Leer y ejecutar el script SQL de usuarios
+    const sqlPath = path.join(__dirname, 'scripts', 'createUsers.sql');
+    if (fs.existsSync(sqlPath)) {
+      const sqlScript = fs.readFileSync(sqlPath, 'utf8');
+      await client.query(sqlScript);
+      console.log('✅ Tablas de usuarios creadas o verificadas');
+    }
+
+    // Crear tablas originales del inventario
     await client.query(`
       CREATE TABLE IF NOT EXISTS categorias (
         id SERIAL PRIMARY KEY,
@@ -67,8 +77,13 @@ const initDb = async () => {
         motivo TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      
+      -- Agregar columnas de usuario y observaciones si no existen
+      ALTER TABLE movimientos 
+      ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id),
+      ADD COLUMN IF NOT EXISTS observaciones TEXT;
     `);
-    console.log('✅ Tablas creadas o verificadas correctamente');
+    console.log('✅ Tablas de inventario creadas o verificadas correctamente');
   } catch (err) {
     console.error('❌ Error al crear tablas:', err);
   } finally {
@@ -80,8 +95,8 @@ initDb();
 
 // ==================== RUTAS ====================
 
-// Ruta principal
-app.get('/', (req, res) => {
+// Ruta de info de la API (cambiada a /api)
+app.get('/api', (req, res) => {
   res.json({
     mensaje: '🎯 API de Inventario',
     version: '1.0.0',
@@ -122,7 +137,7 @@ app.post('/api/categorias', async (req, res) => {
 // ========== PRODUCTOS ==========
 
 // Listar todos los productos
-app.get('/api/productos', async (req, res) => {
+app.get('/api/productos', verificarToken, verificarPermiso('ver_productos'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.*, c.nombre as categoria_nombre 
@@ -138,7 +153,7 @@ app.get('/api/productos', async (req, res) => {
 });
 
 // Obtener un producto por ID
-app.get('/api/productos/:id', async (req, res) => {
+app.get('/api/productos/:id', verificarToken, verificarPermiso('ver_productos'), async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT p.*, c.nombre as categoria_nombre FROM productos p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.id = $1',
@@ -154,7 +169,7 @@ app.get('/api/productos/:id', async (req, res) => {
 });
 
 // Crear producto
-app.post('/api/productos', async (req, res) => {
+app.post('/api/productos', verificarToken, verificarPermiso('crear_productos'), async (req, res) => {
   const { nombre, descripcion, sku, precio, stock, stock_minimo, categoria_id } = req.body;
   try {
     const result = await pool.query(
@@ -168,7 +183,7 @@ app.post('/api/productos', async (req, res) => {
 });
 
 // Actualizar producto
-app.put('/api/productos/:id', async (req, res) => {
+app.put('/api/productos/:id', verificarToken, verificarPermiso('editar_productos'), async (req, res) => {
   const { nombre, descripcion, precio, stock_minimo, categoria_id, activo } = req.body;
   try {
     const result = await pool.query(
@@ -185,7 +200,7 @@ app.put('/api/productos/:id', async (req, res) => {
 });
 
 // Eliminar producto (soft delete)
-app.delete('/api/productos/:id', async (req, res) => {
+app.delete('/api/productos/:id', verificarToken, verificarPermiso('eliminar_productos'), async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE productos SET activo = false WHERE id = $1 RETURNING *',
@@ -203,8 +218,8 @@ app.delete('/api/productos/:id', async (req, res) => {
 // ========== MOVIMIENTOS DE INVENTARIO ==========
 
 // Registrar entrada de stock
-app.post('/api/movimientos/entrada', async (req, res) => {
-  const { producto_id, cantidad, motivo } = req.body;
+app.post('/api/movimientos/entrada', verificarToken, verificarPermiso('crear_entrada'), async (req, res) => {
+  const { producto_id, cantidad, motivo, observaciones } = req.body;
   const client = await pool.connect();
   
   try {
@@ -216,10 +231,10 @@ app.post('/api/movimientos/entrada', async (req, res) => {
       [cantidad, producto_id]
     );
     
-    // Registrar movimiento
+    // Registrar movimiento con usuario
     const result = await client.query(
-      'INSERT INTO movimientos (producto_id, tipo, cantidad, motivo) VALUES ($1, $2, $3, $4) RETURNING *',
-      [producto_id, 'ENTRADA', cantidad, motivo]
+      'INSERT INTO movimientos (producto_id, tipo, cantidad, motivo, usuario_id, observaciones) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [producto_id, 'ENTRADA', cantidad, motivo, req.usuario.id, observaciones]
     );
     
     await client.query('COMMIT');
@@ -233,8 +248,8 @@ app.post('/api/movimientos/entrada', async (req, res) => {
 });
 
 // Registrar salida de stock
-app.post('/api/movimientos/salida', async (req, res) => {
-  const { producto_id, cantidad, motivo } = req.body;
+app.post('/api/movimientos/salida', verificarToken, verificarPermiso('crear_salida'), async (req, res) => {
+  const { producto_id, cantidad, motivo, observaciones } = req.body;
   const client = await pool.connect();
   
   try {
@@ -260,10 +275,10 @@ app.post('/api/movimientos/salida', async (req, res) => {
       [cantidad, producto_id]
     );
     
-    // Registrar movimiento
+    // Registrar movimiento con usuario
     const result = await client.query(
-      'INSERT INTO movimientos (producto_id, tipo, cantidad, motivo) VALUES ($1, $2, $3, $4) RETURNING *',
-      [producto_id, 'SALIDA', cantidad, motivo]
+      'INSERT INTO movimientos (producto_id, tipo, cantidad, motivo, usuario_id, observaciones) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [producto_id, 'SALIDA', cantidad, motivo, req.usuario.id, observaciones]
     );
     
     await client.query('COMMIT');
@@ -277,12 +292,13 @@ app.post('/api/movimientos/salida', async (req, res) => {
 });
 
 // Listar movimientos
-app.get('/api/movimientos', async (req, res) => {
+app.get('/api/movimientos', verificarToken, verificarPermiso('ver_movimientos'), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT m.*, p.nombre as producto_nombre 
+      SELECT m.*, p.nombre as producto_nombre, u.nombre as usuario_nombre
       FROM movimientos m 
       JOIN productos p ON m.producto_id = p.id 
+      LEFT JOIN usuarios u ON m.usuario_id = u.id
       ORDER BY m.created_at DESC 
       LIMIT 100
     `);
@@ -292,8 +308,10 @@ app.get('/api/movimientos', async (req, res) => {
   }
 });
 
+// ========== REPORTES ==========
+
 // Productos con stock bajo
-app.get('/api/reportes/stock-bajo', async (req, res) => {
+app.get('/api/reportes/stock-bajo', verificarToken, verificarPermiso('ver_reportes'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.*, c.nombre as categoria_nombre 
