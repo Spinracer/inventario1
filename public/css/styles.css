@@ -946,6 +946,31 @@ body.dark-mode .form-group select {
         min-width: unset;
         width: 100%;
     }
+    
+    /* Mejoras adicionales para tablets */
+    .card-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .card-header > div {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .search-box {
+        width: 100%;
+    }
+    
+    .modal {
+        width: 90%;
+        max-height: 90vh;
+    }
+    
+    /* Galería responsive */
+    #galeriaImagenes {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1088,4 +1113,82 @@ body.dark-mode .form-group select {
     gap: 10px;
     flex-wrap: wrap;
     align-items: center;
+}
+
+/* ========== GALERÍA DE IMÁGENES ========== */
+.imagen-producto {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: transform 0.3s;
+}
+
+.imagen-producto:hover {
+    transform: scale(1.05);
+}
+
+.imagen-producto img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+}
+
+/* ========== NOTIFICACIONES DE STOCK ========== */
+#notificacionesStockBajo {
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* ========== QR Y ETIQUETAS ========== */
+#qrCanvas {
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+}
+
+/* ========== MEJORAS RESPONSIVE ADICIONALES ========== */
+@media (max-width: 480px) {
+    .action-buttons {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .action-buttons .btn-sm {
+        width: 100%;
+        margin: 2px 0;
+    }
+    
+    .modal {
+        width: 95%;
+        max-height: 95vh;
+        padding: 15px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Dark mode para nuevos elementos */
+body.dark-mode #notificacionesStockBajo > div {
+    background: var(--bg-white);
+    color: var(--text-dark);
+    border-left-color: #f59e0b;
+}
+
+body.dark-mode .imagen-producto {
+    border-color: var(--border-color);
+}
+
+body.dark-mode #qrCanvas {
+    border-color: var(--border-color);
 }

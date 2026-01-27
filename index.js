@@ -18,6 +18,10 @@ const { verificarToken, verificarPermiso } = require('./middleware/auth');
 // Importar rutas
 const authRoutes = require('./routes/auth');
 const usuariosRoutes = require('./routes/usuarios');
+const proveedoresRoutes = require('./routes/proveedores');
+const asignacionesRoutes = require('./routes/asignaciones');
+const imagenesRoutes = require('./routes/imagenes');
+const reportesRoutes = require('./routes/reportes');
 
 // Middleware ANTES de las rutas
 app.use(cors());
@@ -26,10 +30,16 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Servir archivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Registrar rutas de autenticación
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/proveedores', proveedoresRoutes);
+app.use('/api/asignaciones', asignacionesRoutes);
+app.use('/api/imagenes', imagenesRoutes);
+app.use('/api/reportes', reportesRoutes);
+
 // Verificar conexión a la base de datos
 pool.connect((err, client, release) => {
   if (err) {
@@ -45,11 +55,19 @@ const initDb = async () => {
   const client = await pool.connect();
   try {
     // Leer y ejecutar el script SQL de usuarios
-    const sqlPath = path.join(__dirname, 'scripts', 'createUsers.sql');
-    if (fs.existsSync(sqlPath)) {
-      const sqlScript = fs.readFileSync(sqlPath, 'utf8');
+    const sqlPathUsers = path.join(__dirname, 'scripts', 'createUsers.sql');
+    if (fs.existsSync(sqlPathUsers)) {
+      const sqlScript = fs.readFileSync(sqlPathUsers, 'utf8');
       await client.query(sqlScript);
       console.log('✅ Tablas de usuarios creadas o verificadas');
+    }
+
+    // Leer y ejecutar el script SQL de fase 2
+    const sqlPathPhase2 = path.join(__dirname, 'scripts', 'createPhase2.sql');
+    if (fs.existsSync(sqlPathPhase2)) {
+      const sqlScript2 = fs.readFileSync(sqlPathPhase2, 'utf8');
+      await client.query(sqlScript2);
+      console.log('✅ Tablas de fase 2 (proveedores, asignaciones) creadas');
     }
 
     // Crear tablas originales del inventario
