@@ -439,4 +439,52 @@ router.put('/:id/permisos', verificarToken, verificarPermiso('editar_usuarios'),
   }
 });
 
+// ========== ADMIN: CAMBIAR CONTRASEÑA DE CUALQUIER USUARIO ==========
+router.put('/:id/cambiar-password', verificarToken, verificarPermiso('editar_usuarios'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nuevaPassword } = req.body;
+
+    if (!nuevaPassword || nuevaPassword.length < 6) {
+      return res.status(400).json({
+        error: 'Datos inválidos',
+        mensaje: 'La contraseña debe tener al menos 6 caracteres'
+      });
+    }
+
+    // Verificar que el usuario existe
+    const usuario = await pool.query('SELECT id, email, nombre FROM usuarios WHERE id = $1', [id]);
+    if (usuario.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado',
+        mensaje: 'El usuario no existe'
+      });
+    }
+
+    // Hash de la nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(nuevaPassword, salt);
+
+    // Actualizar contraseña
+    await pool.query(
+      'UPDATE usuarios SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [passwordHash, id]
+    );
+
+    // Invalidar todas las sesiones del usuario (forzar re-login)
+    await pool.query('DELETE FROM sesiones WHERE usuario_id = $1', [id]);
+
+    res.json({
+      mensaje: `Contraseña de ${usuario.rows[0].nombre} actualizada exitosamente`,
+      usuario: usuario.rows[0].email
+    });
+  } catch (error) {
+    console.error('Error al cambiar contraseña:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      mensaje: 'No se pudo cambiar la contraseña'
+    });
+  }
+});
+
 module.exports = router;

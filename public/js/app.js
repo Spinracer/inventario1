@@ -98,6 +98,92 @@ function clearAuth() {
     localStorage.removeItem('authToken');
 }
 
+// ========== FUNCIÓN DE VERIFICACIÓN DE PERMISOS ==========
+// Verifica si el usuario actual tiene un permiso específico
+function tienePermiso(permiso) {
+    // Admin siempre tiene todos los permisos
+    if (currentUser && currentUser.rol === 'admin') {
+        return true;
+    }
+    // Verificar el permiso específico en userPermissions
+    return userPermissions && userPermissions[permiso] === true;
+}
+
+// Aplica los permisos a la interfaz ocultando/mostrando elementos
+function aplicarPermisosInterfaz() {
+    console.log('🔐 Aplicando permisos a la interfaz:', userPermissions);
+    
+    // === MENU LATERAL ===
+    // Mostrar/ocultar menú de Usuarios
+    const menuUsuarios = document.getElementById('menuUsuarios');
+    if (menuUsuarios) {
+        menuUsuarios.style.display = tienePermiso('ver_usuarios') ? 'flex' : 'none';
+    }
+    
+    // === PRODUCTOS ===
+    // Botón nuevo producto
+    const btnNuevoProducto = document.querySelector('[onclick="mostrarFormProducto()"]');
+    if (btnNuevoProducto) {
+        btnNuevoProducto.style.display = tienePermiso('crear_productos') ? 'inline-flex' : 'none';
+    }
+    
+    // Formulario de producto
+    const formProducto = document.getElementById('formProducto');
+    if (formProducto && !tienePermiso('crear_productos')) {
+        formProducto.classList.add('hidden');
+    }
+    
+    // === CATEGORÍAS ===
+    // Botón nueva categoría
+    const btnNuevaCategoria = document.querySelector('[onclick="mostrarFormCategoria()"]');
+    if (btnNuevaCategoria) {
+        btnNuevaCategoria.style.display = tienePermiso('crear_categorias') ? 'inline-flex' : 'none';
+    }
+    
+    // === MOVIMIENTOS ===
+    // Formulario de movimientos
+    const formMovimiento = document.getElementById('movimientoForm');
+    if (formMovimiento) {
+        const puedeEntrada = tienePermiso('crear_entrada');
+        const puedeSalida = tienePermiso('crear_salida');
+        // Si no puede hacer ninguno, ocultar formulario
+        if (!puedeEntrada && !puedeSalida) {
+            formMovimiento.closest('.card').style.display = 'none';
+        } else {
+            formMovimiento.closest('.card').style.display = 'block';
+            // Ajustar opciones del select de tipo
+            const selectTipo = formMovimiento.querySelector('[name="tipo"]');
+            if (selectTipo) {
+                Array.from(selectTipo.options).forEach(opt => {
+                    if (opt.value === 'ENTRADA') opt.disabled = !puedeEntrada;
+                    if (opt.value === 'SALIDA') opt.disabled = !puedeSalida;
+                });
+            }
+        }
+    }
+    
+    // === PROVEEDORES ===
+    // Botón nuevo proveedor
+    const btnNuevoProveedor = document.querySelector('[onclick="mostrarFormProveedor()"]');
+    if (btnNuevoProveedor) {
+        btnNuevoProveedor.style.display = tienePermiso('crear_proveedores') ? 'inline-flex' : 'none';
+    }
+    
+    // === ASIGNACIONES ===
+    // Formulario de asignaciones
+    const formAsignacion = document.getElementById('asignacionForm');
+    if (formAsignacion) {
+        formAsignacion.closest('.card').style.display = tienePermiso('crear_asignaciones') ? 'block' : 'none';
+    }
+    // Botón agregar personal
+    const btnAgregarPersonal = document.querySelector('[onclick="mostrarFormPersonal()"]');
+    if (btnAgregarPersonal) {
+        btnAgregarPersonal.style.display = tienePermiso('crear_asignaciones') ? 'inline-flex' : 'none';
+    }
+    
+    console.log('✅ Permisos aplicados a la interfaz');
+}
+
 // Función para hacer peticiones autenticadas
 async function fetchAuth(url, options = {}) {
     const token = getAuthToken();
@@ -208,12 +294,15 @@ function setupLoginForm() {
                 
                 console.log('📌 Datos guardados:', {
                     usuario: currentUser.email,
-                    token: data.token ? data.token.substring(0, 20) + '...' : 'Sin token'
+                    token: data.token ? data.token.substring(0, 20) + '...' : 'Sin token',
+                    permisos: userPermissions
                 });
                 
                 mostrarDashboard();
                 showToast(`Bienvenido ${data.usuario.nombre}`, 'success');
                 cargarDashboard();
+                aplicarPermisosInterfaz(); // Aplicar permisos a la UI
+                actualizarMenuUsuario(); // Actualizar info de usuario en barra superior
             } else {
                 console.log('❌ Login fallido:', data.mensaje);
                 showToast(data.mensaje || 'Credenciales incorrectas', 'error');
@@ -232,7 +321,29 @@ async function logout() {
     } catch (error) {
         console.error('Error en logout:', error);
     } finally {
+        // Limpiar completamente los datos de sesión
         clearAuth();
+        
+        // Cerrar cualquier menú abierto
+        const menuDropdown = document.getElementById('menuUsuarioDropdown');
+        if (menuDropdown) menuDropdown.remove();
+        
+        // Resetear la interfaz de usuario en la barra superior
+        const userInfo = document.querySelector('.user-info');
+        if (userInfo) {
+            userInfo.innerHTML = `
+                <div class="user-avatar">?</div>
+                <div>
+                    <div style="font-weight: 600;">Usuario</div>
+                    <div style="font-size: 12px;" class="text-gray">Sin sesión</div>
+                </div>
+            `;
+        }
+        
+        // Limpiar formulario de login
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) loginForm.reset();
+        
         mostrarLogin();
         showToast('Sesión cerrada exitosamente', 'info');
     }
@@ -322,6 +433,11 @@ async function cargarProductos() {
     try {
         const productos = await fetchAuth(`${API_URL}/productos`).then(r => r.json());
         const tbody = document.querySelector('#productosTable tbody');
+        
+        // Verificar permisos para botones de acción
+        const puedeEditar = tienePermiso('editar_productos');
+        const puedeEliminar = tienePermiso('eliminar_productos');
+        
         tbody.innerHTML = productos.map(p => `
             <tr>
                 <td>${p.nombre}</td>
@@ -332,10 +448,10 @@ async function cargarProductos() {
                 <td><span class="badge badge-success">Activo</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="abrirModalEditarProducto(${p.id})" title="Editar">✏️</button>
-                        <button class="btn btn-sm" style="background: #10b981; color: white;" onclick="abrirModalImagenes(${p.id})" title="Imágenes">🖼️</button>
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="abrirModalEditarProducto(${p.id})" title="Editar">✏️</button>` : ''}
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #10b981; color: white;" onclick="abrirModalImagenes(${p.id})" title="Imágenes">🖼️</button>` : ''}
                         <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="abrirModalQR(${p.id})" title="Generar QR">📱</button>
-                        <button class="btn btn-sm btn-danger" onclick="eliminarProducto(${p.id})" title="Eliminar">🗑️</button>
+                        ${puedeEliminar ? `<button class="btn btn-sm btn-danger" onclick="eliminarProducto(${p.id})" title="Eliminar">🗑️</button>` : ''}
                     </div>
                 </td>
             </tr>
@@ -349,6 +465,11 @@ async function cargarProductos() {
 }
 
 async function eliminarProducto(id) {
+    // Verificar permiso antes de ejecutar
+    if (!tienePermiso('eliminar_productos')) {
+        showToast('No tienes permiso para eliminar productos', 'error');
+        return;
+    }
     if (confirm('¿Estás seguro de eliminar este producto?')) {
         try {
             const response = await fetchAuth(`${API_URL}/productos/${id}`, {method: 'DELETE'});
@@ -365,6 +486,11 @@ async function eliminarProducto(id) {
 
 // Abrir modal para editar producto
 async function abrirModalEditarProducto(id) {
+    // Verificar permiso antes de abrir modal
+    if (!tienePermiso('editar_productos')) {
+        showToast('No tienes permiso para editar productos', 'error');
+        return;
+    }
     try {
         const producto = await fetchAuth(`${API_URL}/productos/${id}`).then(r => r.json());
         
@@ -446,6 +572,10 @@ async function cargarCategorias() {
     try {
         const categorias = await fetchAuth(`${API_URL}/categorias`).then(r => r.json());
         const tbody = document.querySelector('#categoriasTable tbody');
+        
+        // Verificar permisos para botones de acción
+        const puedeEliminar = tienePermiso('eliminar_categorias');
+        
         tbody.innerHTML = categorias.map(c => `
             <tr>
                 <td>${c.id}</td>
@@ -453,7 +583,7 @@ async function cargarCategorias() {
                 <td>${c.descripcion || '-'}</td>
                 <td>${new Date(c.created_at).toLocaleDateString()}</td>
                 <td>
-                    <button class="btn btn-sm btn-danger" onclick="eliminarCategoria(${c.id})">Eliminar</button>
+                    ${puedeEliminar ? `<button class="btn btn-sm btn-danger" onclick="eliminarCategoria(${c.id})">Eliminar</button>` : '-'}
                 </td>
             </tr>
         `).join('');
@@ -501,6 +631,11 @@ async function cargarMovimientos() {
 
 // ========== FORMS ==========
 function mostrarFormProducto() {
+    // Verificar permiso
+    if (!tienePermiso('crear_productos')) {
+        showToast('No tienes permiso para crear productos', 'error');
+        return;
+    }
     document.getElementById('formProducto').classList.remove('hidden');
 }
 
@@ -510,6 +645,11 @@ function ocultarFormProducto() {
 }
 
 function mostrarFormCategoria() {
+    // Verificar permiso
+    if (!tienePermiso('crear_categorias')) {
+        showToast('No tienes permiso para crear categorías', 'error');
+        return;
+    }
     document.getElementById('formCategoria').classList.remove('hidden');
 }
 
@@ -1062,6 +1202,11 @@ async function cargarSelectsReportes() {
 let productoImagenActual = null;
 
 async function abrirModalImagenes(id) {
+    // Verificar permiso
+    if (!tienePermiso('editar_productos')) {
+        showToast('No tienes permiso para gestionar imágenes', 'error');
+        return;
+    }
     try {
         const producto = await fetchAuth(`${API_URL}/productos/${id}`).then(r => r.json());
         productoImagenActual = producto;
@@ -1623,6 +1768,11 @@ async function cargarUsuarios() {
     try {
         const usuarios = await fetchAuth(`${API_URL}/usuarios`).then(r => r.json());
         const tbody = document.querySelector('#usuariosTable tbody');
+        
+        // Verificar permisos para botones de acción
+        const puedeEditar = tienePermiso('editar_usuarios');
+        const puedeEliminar = tienePermiso('eliminar_usuarios');
+        
         tbody.innerHTML = usuarios.map(u => `
             <tr>
                 <td>${u.nombre}</td>
@@ -1632,12 +1782,14 @@ async function cargarUsuarios() {
                 <td>${u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString() : 'Nunca'}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="editarPermisosUsuario(${u.id})">🔐 Permisos</button>
-                        <button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editarRolUsuario(${u.id}, '${u.rol_nombre}')">👤 Rol</button>
-                        ${u.activo 
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="editarPermisosUsuario(${u.id})">🔐 Permisos</button>` : ''}
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editarRolUsuario(${u.id}, '${u.rol_nombre}')">👤 Rol</button>` : ''}
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #f59e0b; color: white;" onclick="cambiarPasswordUsuario(${u.id}, '${u.nombre}')">🔑 Clave</button>` : ''}
+                        ${puedeEliminar ? (u.activo 
                             ? `<button class="btn btn-sm btn-danger" onclick="desactivarUsuario(${u.id})">🚫 Desactivar</button>`
                             : `<button class="btn btn-sm btn-success" onclick="activarUsuario(${u.id})">✅ Activar</button>`
-                        }
+                        ) : ''}
+                        ${!puedeEditar && !puedeEliminar ? '-' : ''}
                     </div>
                 </td>
             </tr>
@@ -1689,6 +1841,77 @@ async function activarUsuario(id) {
             showToast('Error al activar usuario', 'error');
         }
     }
+}
+
+// ========== ADMIN: CAMBIAR CONTRASEÑA DE USUARIO ==========
+async function cambiarPasswordUsuario(usuarioId, nombreUsuario) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay active';
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>🔑 Cambiar Contraseña</h2>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+            </div>
+            
+            <p class="text-gray" style="margin-bottom: 15px;">
+                Cambiar contraseña de: <strong>${nombreUsuario}</strong>
+            </p>
+            
+            <form id="cambiarPasswordForm">
+                <div class="form-group">
+                    <label>Nueva Contraseña</label>
+                    <input type="password" id="nuevaPasswordAdmin" minlength="6" required placeholder="Mínimo 6 caracteres">
+                </div>
+                <div class="form-group">
+                    <label>Confirmar Contraseña</label>
+                    <input type="password" id="confirmarPasswordAdmin" minlength="6" required placeholder="Repetir contraseña">
+                </div>
+                <div class="form-group-row" style="margin-top: 20px;">
+                    <button type="submit" class="btn btn-success">Cambiar Contraseña</button>
+                    <button type="button" class="btn btn-cancel" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('cambiarPasswordForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const nuevaPassword = document.getElementById('nuevaPasswordAdmin').value;
+        const confirmarPassword = document.getElementById('confirmarPasswordAdmin').value;
+        
+        if (nuevaPassword !== confirmarPassword) {
+            showToast('Las contraseñas no coinciden', 'error');
+            return;
+        }
+        
+        if (nuevaPassword.length < 6) {
+            showToast('La contraseña debe tener al menos 6 caracteres', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetchAuth(`${API_URL}/usuarios/${usuarioId}/cambiar-password`, {
+                method: 'PUT',
+                body: JSON.stringify({ nuevaPassword })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showToast(data.mensaje || 'Contraseña cambiada exitosamente', 'success');
+                modal.remove();
+            } else {
+                showToast(data.mensaje || 'Error al cambiar contraseña', 'error');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('Error al cambiar contraseña', 'error');
+        }
+    });
 }
 
 // ========== GESTIÓN COMPLETA DE PERMISOS POR USUARIO ==========
@@ -1993,6 +2216,11 @@ async function editarRolUsuario(usuarioId, rolActual) {
 
 // ========== ELIMINAR CATEGORÍAS ==========
 async function eliminarCategoria(id) {
+    // Verificar permiso antes de ejecutar
+    if (!tienePermiso('eliminar_categorias')) {
+        showToast('No tienes permiso para eliminar categorías', 'error');
+        return;
+    }
     if (!confirm('¿Estás seguro de eliminar esta categoría? Los productos asociados quedarán sin categoría.')) return;
     
     try {
@@ -2051,6 +2279,11 @@ async function cargarProveedores() {
     try {
         const proveedores = await fetchAuth(`${API_URL}/proveedores`).then(r => r.json());
         const tbody = document.querySelector('#proveedoresTable tbody');
+        
+        // Verificar permisos para botones de acción
+        const puedeEditar = tienePermiso('editar_proveedores');
+        const puedeEliminar = tienePermiso('editar_proveedores'); // Usar mismo permiso para eliminar
+        
         tbody.innerHTML = proveedores.map(p => `
             <tr>
                 <td>${p.nombre}</td>
@@ -2059,8 +2292,9 @@ async function cargarProveedores() {
                 <td>${p.email || '-'}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editarProveedor(${p.id})">Editar</button>
-                        <button class="btn btn-sm btn-danger" onclick="eliminarProveedor(${p.id})">Eliminar</button>
+                        ${puedeEditar ? `<button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editarProveedor(${p.id})">Editar</button>` : ''}
+                        ${puedeEliminar ? `<button class="btn btn-sm btn-danger" onclick="eliminarProveedor(${p.id})">Eliminar</button>` : ''}
+                        ${!puedeEditar && !puedeEliminar ? '-' : ''}
                     </div>
                 </td>
             </tr>
@@ -2072,6 +2306,11 @@ async function cargarProveedores() {
 }
 
 function mostrarFormProveedor() {
+    // Verificar permiso
+    if (!tienePermiso('crear_proveedores')) {
+        showToast('No tienes permiso para crear proveedores', 'error');
+        return;
+    }
     document.getElementById('formProveedor').classList.remove('hidden');
 }
 
@@ -2081,6 +2320,11 @@ function ocultarFormProveedor() {
 }
 
 async function eliminarProveedor(id) {
+    // Verificar permiso
+    if (!tienePermiso('editar_proveedores')) {
+        showToast('No tienes permiso para eliminar proveedores', 'error');
+        return;
+    }
     if (confirm('¿Estás seguro de eliminar este proveedor?')) {
         try {
             const response = await fetchAuth(`${API_URL}/proveedores/${id}`, {method: 'DELETE'});
@@ -2139,6 +2383,9 @@ async function cargarAsignaciones() {
         
         const filtradas = filtro === 'todas' ? asignaciones : asignaciones.filter(a => a.estado === filtro);
         
+        // Verificar permisos
+        const puedeEditar = tienePermiso('editar_asignaciones');
+        
         const tbody = document.querySelector('#asignacionesTable tbody');
         tbody.innerHTML = filtradas.map(a => `
             <tr>
@@ -2149,7 +2396,7 @@ async function cargarAsignaciones() {
                 <td><span class="badge badge-${a.estado === 'asignado' ? 'success' : 'warning'}">${a.estado}</span></td>
                 <td>${a.usuario_asigna_nombre || '-'}</td>
                 <td>
-                    ${a.estado === 'asignado' ? `
+                    ${a.estado === 'asignado' && puedeEditar ? `
                         <button class="btn btn-sm btn-warning" onclick="devolverAsignacion(${a.id})">Devolver</button>
                     ` : '-'}
                 </td>
@@ -2162,6 +2409,11 @@ async function cargarAsignaciones() {
 }
 
 async function devolverAsignacion(id) {
+    // Verificar permiso
+    if (!tienePermiso('editar_asignaciones')) {
+        showToast('No tienes permiso para devolver asignaciones', 'error');
+        return;
+    }
     const observaciones = prompt('Observaciones de la devolución (opcional):');
     
     try {
@@ -2259,6 +2511,11 @@ async function cargarDepartamentosYZonas() {
 }
 
 function mostrarFormPersonal() {
+    // Verificar permiso
+    if (!tienePermiso('crear_asignaciones')) {
+        showToast('No tienes permiso para agregar personal', 'error');
+        return;
+    }
     document.getElementById('formPersonal').classList.remove('hidden');
 }
 
@@ -2394,10 +2651,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const autenticado = await verificarAutenticacion();
     
     if (autenticado) {
-        // Mostrar menú de usuarios solo si es admin
-        if (currentUser && currentUser.rol === 'admin') {
-            document.getElementById('menuUsuarios').style.display = 'flex';
-        }
+        // Aplicar permisos a la interfaz
+        aplicarPermisosInterfaz();
         
         // Cargar datos iniciales
         cargarSelectoresBusqueda();

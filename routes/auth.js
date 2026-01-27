@@ -154,11 +154,11 @@ router.post('/login', async (req, res) => {
 
     const usuario = result.rows[0];
 
-    // Verificar si está activo
-    if (!usuario.activo) {
+    // Verificar si está activo (los admin siempre pueden entrar)
+    if (!usuario.activo && usuario.rol_nombre !== 'admin') {
       return res.status(403).json({ 
         error: 'Usuario inactivo',
-        mensaje: 'Tu cuenta ha sido desactivada' 
+        mensaje: 'Tu cuenta ha sido desactivada. Contacta al administrador.' 
       });
     }
 
@@ -170,6 +170,14 @@ router.post('/login', async (req, res) => {
         error: 'Credenciales inválidas',
         mensaje: 'Email o contraseña incorrectos' 
       });
+    }
+
+    // Para usuarios no-admin: invalidar sesiones anteriores (sesión única)
+    if (usuario.rol_nombre !== 'admin') {
+      await pool.query(
+        'DELETE FROM sesiones WHERE usuario_id = $1',
+        [usuario.id]
+      );
     }
 
     // Obtener permisos

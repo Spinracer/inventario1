@@ -153,6 +153,40 @@
 
 ---
 
+## � OPCIONAL / EXTRA - SEGURIDAD AVANZADA
+
+### 17. Cifrado de Variables de Entorno
+- [ ] Migrar de `.env` texto plano a Docker Secrets
+- [ ] Alternativa: Usar gestor de secretos (HashiCorp Vault, Doppler, AWS Secrets Manager)
+- [ ] Nunca commitear `.env` al repositorio (verificar `.gitignore`)
+
+### 18. Cifrado de Datos Sensibles en Base de Datos
+- [ ] Cifrar columnas sensibles (email, nombre, teléfono) con AES-256-GCM
+- [ ] Implementar funciones `encrypt()` y `decrypt()` en Node.js usando `crypto`
+- [ ] Alternativa: Usar extensión `pgcrypto` de PostgreSQL
+- [ ] Las contraseñas ya están cifradas con bcrypt ✅
+
+### 19. Cifrado de Base de Datos Completa (At-rest)
+- [ ] Cifrar volumen de PostgreSQL con LUKS (Linux)
+- [ ] Configurar cifrado transparente (TDE) en PostgreSQL Enterprise
+- [ ] Cifrar backups de la base de datos
+
+### 20. Cifrado de Archivos de Configuración
+- [ ] Implementar git-crypt para cifrar `.env` en el repositorio
+- [ ] Alternativa: Usar SOPS (Mozilla) para cifrar valores dentro de archivos
+- [ ] Configurar claves GPG para acceso autorizado
+
+**Notas de seguridad actuales:**
+| Dato | Estado | Ubicación |
+|------|--------|-----------|
+| Credenciales DB | ⚠️ Texto plano | `.env` |
+| JWT_SECRET | ⚠️ Texto plano | `.env` |
+| Contraseñas usuarios | ✅ Cifradas | BD (bcrypt) |
+| Emails/Nombres | ⚠️ Texto plano | BD |
+| Tokens de sesión | ⚠️ Texto plano | BD |
+
+---
+
 ## 🔧 BUGS CONOCIDOS
 
 1. **QR vacío**: El canvas no dibuja el QR, posible problema con el orden de carga de QRious
@@ -170,6 +204,7 @@
 5. **MEDIA**: Gráficos en dashboard
 6. **MEDIA**: Detalle de movimientos al hacer clic
 7. **BAJA**: Almacenamiento externo de imágenes
+8. **OPCIONAL**: Cifrado de datos sensibles y secretos
 
 ---
 
