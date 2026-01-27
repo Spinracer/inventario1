@@ -104,14 +104,14 @@ router.post('/movimientos-pdf', verificarToken, verificarPermiso('generar_report
     
     // Headers de tabla
     doc.fontSize(9).font('Helvetica-Bold');
-    doc.text('Fecha', 40, tableTop, { width: 70, continued: false });
-    doc.text('Producto', 110, tableTop, { width: 120, continued: false });
-    doc.text('SKU', 230, tableTop, { width: 60, continued: false });
-    doc.text('Tipo', 290, tableTop, { width: 50, continued: false });
-    doc.text('Cant.', 340, tableTop, { width: 40, continued: false });
-    doc.text('Precio', 380, tableTop, { width: 50, continued: false });
-    doc.text('Subtotal', 430, tableTop, { width: 60, continued: false });
-    doc.text('Usuario', 490, tableTop, { width: 80, continued: false });
+    doc.text('Fecha', 40, tableTop, { width: 65, continued: false });
+    doc.text('Producto', 105, tableTop, { width: 110, continued: false });
+    doc.text('SKU', 215, tableTop, { width: 55, continued: false });
+    doc.text('Tipo', 270, tableTop, { width: 45, continued: false });
+    doc.text('Cant.', 315, tableTop, { width: 35, continued: false });
+    doc.text('Precio', 350, tableTop, { width: 55, continued: false });
+    doc.text('Subtotal', 405, tableTop, { width: 60, continued: false });
+    doc.text('Usuario', 475, tableTop, { width: 95, continued: false });
     
     doc.moveTo(40, tableTop + 15).lineTo(572, tableTop + 15).stroke();
     
@@ -129,14 +129,14 @@ router.post('/movimientos-pdf', verificarToken, verificarPermiso('generar_report
         
         // Repetir headers
         doc.fontSize(9).font('Helvetica-Bold');
-        doc.text('Fecha', 40, yPosition, { width: 70, continued: false });
-        doc.text('Producto', 110, yPosition, { width: 120, continued: false });
-        doc.text('SKU', 230, yPosition, { width: 60, continued: false });
-        doc.text('Tipo', 290, yPosition, { width: 50, continued: false });
-        doc.text('Cant.', 340, yPosition, { width: 40, continued: false });
-        doc.text('Precio', 380, yPosition, { width: 50, continued: false });
-        doc.text('Subtotal', 430, yPosition, { width: 60, continued: false });
-        doc.text('Usuario', 490, yPosition, { width: 80, continued: false });
+        doc.text('Fecha', 40, yPosition, { width: 65, continued: false });
+        doc.text('Producto', 105, yPosition, { width: 110, continued: false });
+        doc.text('SKU', 215, yPosition, { width: 55, continued: false });
+        doc.text('Tipo', 270, yPosition, { width: 45, continued: false });
+        doc.text('Cant.', 315, yPosition, { width: 35, continued: false });
+        doc.text('Precio', 350, yPosition, { width: 55, continued: false });
+        doc.text('Subtotal', 405, yPosition, { width: 60, continued: false });
+        doc.text('Usuario', 475, yPosition, { width: 95, continued: false });
         
         doc.moveTo(40, yPosition + 15).lineTo(572, yPosition + 15).stroke();
         yPosition += itemHeight;
@@ -150,14 +150,14 @@ router.post('/movimientos-pdf', verificarToken, verificarPermiso('generar_report
       
       const fecha = new Date(mov.created_at).toLocaleDateString('es-HN');
       
-      doc.text(fecha, 40, yPosition, { width: 70, continued: false });
-      doc.text(mov.producto_nombre.substring(0, 20), 110, yPosition, { width: 120, continued: false });
-      doc.text(mov.sku || 'N/A', 230, yPosition, { width: 60, continued: false });
-      doc.text(mov.tipo, 290, yPosition, { width: 50, continued: false });
-      doc.text(mov.cantidad.toString(), 340, yPosition, { width: 40, align: 'right', continued: false });
-      doc.text(`$${precio.toFixed(2)}`, 380, yPosition, { width: 50, align: 'right', continued: false });
-      doc.text(`$${subtotal.toFixed(2)}`, 430, yPosition, { width: 60, align: 'right', continued: false });
-      doc.text((mov.usuario_nombre || 'N/A').substring(0, 15), 490, yPosition, { width: 80, continued: false });
+      doc.text(fecha, 40, yPosition, { width: 65, continued: false });
+      doc.text(mov.producto_nombre.substring(0, 18), 105, yPosition, { width: 110, continued: false });
+      doc.text(mov.sku || 'N/A', 215, yPosition, { width: 55, continued: false });
+      doc.text(mov.tipo, 270, yPosition, { width: 45, continued: false });
+      doc.text(mov.cantidad.toString(), 315, yPosition, { width: 35, align: 'right', continued: false });
+      doc.text(`L.${precio.toFixed(2)}`, 350, yPosition, { width: 55, align: 'right', continued: false });
+      doc.text(`L.${subtotal.toFixed(2)}`, 405, yPosition, { width: 60, align: 'right', continued: false });
+      doc.text((mov.usuario_nombre || 'N/A').substring(0, 18), 475, yPosition, { width: 95, continued: false });
       
       yPosition += itemHeight;
       
@@ -175,7 +175,7 @@ router.post('/movimientos-pdf', verificarToken, verificarPermiso('generar_report
     doc.fontSize(11).font('Helvetica-Bold');
     doc.text(`Total de movimientos: ${movimientos.length}`, 40, doc.y);
     doc.text(`Cantidad total: ${totalCantidad} unidades`, 40, doc.y);
-    doc.text(`Valor total: $${totalValor.toFixed(2)}`, 40, doc.y, { underline: true });
+    doc.text(`Valor total: L.${totalValor.toFixed(2)}`, 40, doc.y, { underline: true });
     
     // Footer
     doc.fontSize(8).font('Helvetica').fillColor('gray');
@@ -248,6 +248,186 @@ router.post('/gastos-quincenal', verificarToken, verificarPermiso('generar_repor
     res.status(500).json({ 
       error: 'Error del servidor',
       mensaje: 'No se pudo generar el reporte de gastos' 
+    });
+  }
+});
+
+// ========== GENERAR PDF DE GASTOS ==========
+router.post('/gastos-pdf', verificarToken, verificarPermiso('generar_reportes'), async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.body;
+    
+    const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+    const buffers = [];
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    const filename = `Reporte_Gastos_${fecha_inicio}_${fecha_fin}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      res.end(pdfData);
+    });
+    
+    // Obtener datos
+    const result = await pool.query(`
+      SELECT 
+        m.*,
+        p.nombre as producto_nombre,
+        p.sku,
+        p.precio,
+        c.nombre as categoria_nombre,
+        (m.cantidad * p.precio) as subtotal
+      FROM movimientos m
+      JOIN productos p ON m.producto_id = p.id
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      WHERE m.tipo = 'SALIDA'
+        AND m.created_at >= $1
+        AND m.created_at <= $2
+      ORDER BY c.nombre, m.created_at DESC
+    `, [fecha_inicio, fecha_fin + ' 23:59:59']);
+    
+    const movimientos = result.rows;
+    const totalGasto = movimientos.reduce((sum, m) => sum + parseFloat(m.subtotal || 0), 0);
+    const totalUnidades = movimientos.reduce((sum, m) => sum + parseInt(m.cantidad), 0);
+    
+    // Agrupar por categoría
+    const porCategoria = {};
+    movimientos.forEach(m => {
+      const cat = m.categoria_nombre || 'Sin Categoría';
+      if (!porCategoria[cat]) {
+        porCategoria[cat] = { cantidad: 0, total: 0, items: [] };
+      }
+      porCategoria[cat].cantidad += m.cantidad;
+      porCategoria[cat].total += parseFloat(m.subtotal || 0);
+      porCategoria[cat].items.push(m);
+    });
+    
+    // === ENCABEZADO ===
+    doc.fontSize(20).font('Helvetica-Bold').text('REPORTE DE GASTOS', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica').text(`Período: ${fecha_inicio} al ${fecha_fin}`, { align: 'center' });
+    doc.fontSize(10).text(`Generado: ${new Date().toLocaleString('es-ES')}`, { align: 'center' });
+    doc.moveDown();
+    
+    // === RESUMEN GENERAL ===
+    doc.fontSize(14).font('Helvetica-Bold').text('RESUMEN GENERAL');
+    doc.moveDown(0.5);
+    
+    const startX = 50;
+    doc.fontSize(11).font('Helvetica');
+    doc.text(`Total de Movimientos: ${movimientos.length}`, startX);
+    doc.text(`Total de Unidades: ${totalUnidades}`, startX);
+    doc.fontSize(12).font('Helvetica-Bold');
+    doc.text(`TOTAL GASTO: L.${totalGasto.toFixed(2)}`, startX);
+    doc.moveDown();
+    
+    // === GASTOS POR CATEGORÍA ===
+    doc.fontSize(14).font('Helvetica-Bold').text('GASTOS POR CATEGORÍA');
+    doc.moveDown(0.5);
+    
+    // Tabla de categorías
+    let y = doc.y;
+    const colWidths = [200, 100, 150];
+    
+    // Encabezados de tabla
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.rect(startX, y, 450, 20).fill('#4f46e5');
+    doc.fillColor('white');
+    doc.text('Categoría', startX + 5, y + 5, { width: colWidths[0] });
+    doc.text('Unidades', startX + colWidths[0] + 5, y + 5, { width: colWidths[1] });
+    doc.text('Total Gasto', startX + colWidths[0] + colWidths[1] + 5, y + 5, { width: colWidths[2] });
+    y += 20;
+    
+    doc.fillColor('black').font('Helvetica');
+    let rowColor = true;
+    
+    Object.entries(porCategoria).forEach(([cat, datos]) => {
+      if (y > 700) {
+        doc.addPage();
+        y = 50;
+      }
+      
+      if (rowColor) {
+        doc.rect(startX, y, 450, 18).fill('#f3f4f6');
+        doc.fillColor('black');
+      }
+      rowColor = !rowColor;
+      
+      doc.fontSize(10);
+      doc.text(cat, startX + 5, y + 4, { width: colWidths[0] });
+      doc.text(datos.cantidad.toString(), startX + colWidths[0] + 5, y + 4, { width: colWidths[1] });
+      doc.text(`L.${datos.total.toFixed(2)}`, startX + colWidths[0] + colWidths[1] + 5, y + 4, { width: colWidths[2] });
+      y += 18;
+    });
+    
+    doc.moveDown(2);
+    
+    // === DETALLE DE MOVIMIENTOS ===
+    if (movimientos.length > 0) {
+      doc.addPage();
+      doc.fontSize(14).font('Helvetica-Bold').text('DETALLE DE MOVIMIENTOS');
+      doc.moveDown(0.5);
+      
+      y = doc.y;
+      const detailCols = [40, 140, 70, 80, 80, 90];
+      
+      // Encabezados
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.rect(startX, y, 500, 18).fill('#4f46e5');
+      doc.fillColor('white');
+      doc.text('#', startX + 3, y + 4, { width: detailCols[0] });
+      doc.text('Producto', startX + detailCols[0] + 3, y + 4, { width: detailCols[1] });
+      doc.text('SKU', startX + detailCols[0] + detailCols[1] + 3, y + 4, { width: detailCols[2] });
+      doc.text('Cantidad', startX + detailCols[0] + detailCols[1] + detailCols[2] + 3, y + 4, { width: detailCols[3] });
+      doc.text('Precio Unit.', startX + detailCols[0] + detailCols[1] + detailCols[2] + detailCols[3] + 3, y + 4, { width: detailCols[4] });
+      doc.text('Subtotal', startX + detailCols[0] + detailCols[1] + detailCols[2] + detailCols[3] + detailCols[4] + 3, y + 4, { width: detailCols[5] });
+      y += 18;
+      
+      doc.fillColor('black').font('Helvetica');
+      rowColor = true;
+      
+      movimientos.slice(0, 50).forEach((m, index) => {
+        if (y > 720) {
+          doc.addPage();
+          y = 50;
+        }
+        
+        if (rowColor) {
+          doc.rect(startX, y, 500, 16).fill('#f9fafb');
+          doc.fillColor('black');
+        }
+        rowColor = !rowColor;
+        
+        doc.fontSize(8);
+        doc.text((index + 1).toString(), startX + 3, y + 4, { width: detailCols[0] });
+        doc.text(m.producto_nombre?.substring(0, 25) || 'N/A', startX + detailCols[0] + 3, y + 4, { width: detailCols[1] });
+        doc.text(m.sku || 'N/A', startX + detailCols[0] + detailCols[1] + 3, y + 4, { width: detailCols[2] });
+        doc.text(m.cantidad.toString(), startX + detailCols[0] + detailCols[1] + detailCols[2] + 3, y + 4, { width: detailCols[3] });
+        doc.text(`L.${parseFloat(m.precio || 0).toFixed(2)}`, startX + detailCols[0] + detailCols[1] + detailCols[2] + detailCols[3] + 3, y + 4, { width: detailCols[4] });
+        doc.text(`L.${parseFloat(m.subtotal || 0).toFixed(2)}`, startX + detailCols[0] + detailCols[1] + detailCols[2] + detailCols[3] + detailCols[4] + 3, y + 4, { width: detailCols[5] });
+        y += 16;
+      });
+      
+      if (movimientos.length > 50) {
+        doc.moveDown();
+        doc.fontSize(9).text(`... y ${movimientos.length - 50} movimientos más`, { align: 'center' });
+      }
+    }
+    
+    // === PIE DE PÁGINA ===
+    doc.moveDown(2);
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text(`TOTAL GENERAL: L.${totalGasto.toFixed(2)}`, { align: 'right' });
+    
+    doc.end();
+    
+  } catch (error) {
+    console.error('Error generando PDF de gastos:', error);
+    res.status(500).json({ 
+      error: 'Error del servidor',
+      mensaje: 'No se pudo generar el PDF de gastos' 
     });
   }
 });

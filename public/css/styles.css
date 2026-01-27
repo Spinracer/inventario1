@@ -58,18 +58,27 @@ body {
     text-align: center;
     transition: all 0.3s ease;
     margin: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .login-container h1 {
     color: var(--primary-color);
     margin-bottom: 10px;
     font-size: clamp(24px, 5vw, 32px);
+    width: 100%;
 }
 
 .login-container p {
     color: var(--text-gray);
     margin-bottom: 30px;
     font-size: clamp(14px, 2vw, 16px);
+    width: 100%;
+}
+
+.login-container form {
+    width: 100%;
 }
 
 .input-group {
@@ -1175,6 +1184,94 @@ body.dark-mode .form-group select {
     
     .stats-grid {
         grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ========== LOGIN RESPONSIVE MEJORADO ========== */
+@media (max-width: 520px) {
+    body {
+        padding: 0;
+    }
+    
+    .login-container {
+        margin: 10px;
+        padding: 25px 20px;
+        max-width: calc(100vw - 20px);
+        box-sizing: border-box;
+        border-radius: 15px;
+    }
+    
+    .login-container h1 {
+        font-size: 20px;
+        margin-bottom: 8px;
+        word-wrap: break-word;
+    }
+    
+    .login-container p {
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+    
+    .login-container p.text-light {
+        font-size: 11px;
+        line-height: 1.6;
+        word-break: break-word;
+    }
+    
+    .login-container p.text-light strong {
+        display: inline-block;
+        word-break: break-all;
+    }
+    
+    .input-group {
+        margin-bottom: 15px;
+    }
+    
+    .input-group label {
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+    
+    .input-group input {
+        padding: 12px;
+        font-size: 14px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .btn-login {
+        padding: 14px;
+        font-size: 15px;
+    }
+}
+
+@media (max-width: 380px) {
+    .login-container {
+        margin: 5px;
+        padding: 20px 15px;
+        max-width: calc(100vw - 10px);
+    }
+    
+    .login-container h1 {
+        font-size: 18px;
+    }
+    
+    .login-container p {
+        font-size: 12px;
+    }
+    
+    .login-container p.text-light {
+        font-size: 10px;
+    }
+    
+    .input-group input {
+        padding: 10px;
+        font-size: 13px;
+    }
+    
+    .btn-login {
+        padding: 12px;
+        font-size: 14px;
     }
 }
 

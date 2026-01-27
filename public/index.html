@@ -27,7 +27,9 @@
         </form>
         
         <p style="margin-top: 20px; font-size: 12px;" class="text-light;">
-            Usuario demo: <strong>admin@inventario.com</strong> | Contraseña: <strong>admin123</strong>
+            Usuario demo:<br>
+            <strong>admin@inventario.com</strong><br>
+            Contraseña: <strong>admin123</strong>
         </p>
     </div>
 
@@ -61,6 +63,9 @@
                 </div>
                 <div class="menu-item" data-section="usuarios" id="menuUsuarios" style="display:none;">
                     <span>👤</span> Usuarios
+                </div>
+                <div class="menu-item" data-section="busqueda">
+                    <span>🔍</span> Búsqueda
                 </div>
                 <div class="menu-item" data-section="reportes">
                     <span>📈</span> Reportes
@@ -532,9 +537,8 @@
                 </div>
             </div>
 
-            <!-- REPORTES SECTION MEJORADA -->
-            <div class="content-section" id="section-reportes">
-                <!-- Búsqueda Avanzada -->
+            <!-- BÚSQUEDA AVANZADA SECTION (SEPARADA) -->
+            <div class="content-section" id="section-busqueda">
                 <div class="card">
                     <div class="card-header">
                         <h2>🔍 Búsqueda Avanzada de Productos</h2>
@@ -581,7 +585,7 @@
                     </form>
                     
                     <div id="resultadosBusqueda" class="hidden" style="margin-top: 20px;">
-                        <h3 class="form-title">Resultados de la búsqueda</h3>
+                        <h3 class="form-title">Resultados: <span id="cantidadResultados">0</span> productos</h3>
                         <table id="resultadosBusquedaTable">
                             <thead>
                                 <tr>
@@ -591,10 +595,46 @@
                                     <th>Proveedor</th>
                                     <th>Stock</th>
                                     <th>Precio</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTES SECTION (SEPARADA) -->
+            <div class="content-section" id="section-reportes">
+                <!-- Reportes Rápidos -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⚡ Reportes Rápidos</h2>
+                    </div>
+                    <div class="grid-2col">
+                        <div class="report-card">
+                            <h3 style="margin-bottom: 10px;">📊 Inventario Completo</h3>
+                            <p class="text-gray" style="margin-bottom: 15px;">Descarga el listado completo actual</p>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-primary" onclick="descargarInventarioCompleto()">📥 Excel</button>
+                                <button class="btn btn-success" onclick="descargarInventarioPDF()">📄 PDF</button>
+                            </div>
+                        </div>
+                        <div class="report-card">
+                            <h3 style="margin-bottom: 10px;">⚠️ Stock Bajo</h3>
+                            <p class="text-gray" style="margin-bottom: 15px;">Productos con stock crítico</p>
+                            <button class="btn btn-primary" onclick="descargarStockBajo()">📥 Descargar PDF</button>
+                        </div>
+                        <div class="report-card">
+                            <h3 style="margin-bottom: 10px;">📤 Exportar Productos</h3>
+                            <p class="text-gray" style="margin-bottom: 15px;">Exportar todos los productos a CSV</p>
+                            <button class="btn btn-success" onclick="exportarProductosCSV()">📤 Exportar CSV</button>
+                        </div>
+                        <div class="report-card">
+                            <h3 style="margin-bottom: 10px;">📥 Importar Productos</h3>
+                            <p class="text-gray" style="margin-bottom: 15px;">Importar desde archivo CSV</p>
+                            <button class="btn btn-success" onclick="abrirImportarCSV()">📥 Importar CSV</button>
+                        </div>
                     </div>
                 </div>
 
@@ -646,7 +686,7 @@
                             </div>
                             <div class="stat-card">
                                 <h3>Valor Total</h3>
-                                <div class="stat-value" id="reporteValorTotal">$0.00</div>
+                                <div class="stat-value" id="reporteValorTotal">L.0.00</div>
                             </div>
                         </div>
                         
@@ -660,6 +700,7 @@
                                     <th>Precio Unit.</th>
                                     <th>Subtotal</th>
                                     <th>Usuario</th>
+                                    <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -667,38 +708,33 @@
                     </div>
                 </div>
 
-                <!-- Reporte de Gastos Quincenal -->
+                <!-- Reporte de Gastos -->
                 <div class="card">
                     <div class="card-header">
                         <h2>💰 Reporte de Gastos</h2>
                     </div>
-                    <div class="grid-2col">
-                        <div class="report-card">
-                            <h3 style="margin-bottom: 10px;">📊 Gastos por Período</h3>
-                            <p class="text-gray" style="margin-bottom: 15px;">Selecciona el período para ver los gastos totales</p>
-                            <form id="reporteGastosForm" onsubmit="event.preventDefault(); generarReporteGastos();">
-                                <div class="form-group">
-                                    <label>Fecha inicio</label>
-                                    <input type="date" id="gastosInicio" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Fecha fin</label>
-                                    <input type="date" id="gastosFin" required>
-                                </div>
-                                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Generar Reporte</button>
-                            </form>
-                        </div>
-                        
-                        <div class="report-card">
-                            <h3 style="margin-bottom: 10px;">📈 Estadísticas Generales</h3>
-                            <div id="estadisticasGenerales" style="font-size: 14px;">
-                                <p class="text-gray">Cargando estadísticas...</p>
+                    <form id="reporteGastosForm" onsubmit="event.preventDefault(); generarReporteGastos();" class="form-section">
+                        <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                            <div class="form-group">
+                                <label>Fecha inicio</label>
+                                <input type="date" id="gastosInicio" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Fecha fin</label>
+                                <input type="date" id="gastosFin" required>
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: flex-end;">
+                                <button type="submit" class="btn btn-primary" style="width: 100%;">Generar</button>
                             </div>
                         </div>
-                    </div>
+                    </form>
                     
                     <div id="resultadosGastos" class="hidden" style="margin-top: 20px;">
-                        <h3 class="form-title">Resumen de Gastos</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 class="form-title" style="margin: 0;">Resumen de Gastos</h3>
+                            <button class="btn btn-success" onclick="descargarPDFGastos()">📄 Descargar PDF</button>
+                        </div>
+                        
                         <div class="stats-grid">
                             <div class="stat-card">
                                 <h3>Total de Salidas</h3>
@@ -710,7 +746,7 @@
                             </div>
                             <div class="stat-card">
                                 <h3>Gasto Total</h3>
-                                <div class="stat-value" id="gastosTotal">$0.00</div>
+                                <div class="stat-value" id="gastosTotal">L.0.00</div>
                             </div>
                         </div>
                         
@@ -725,32 +761,26 @@
                             </thead>
                             <tbody></tbody>
                         </table>
-                    </div>
-                </div>
-
-                <!-- Reportes Rápidos -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2>⚡ Reportes Rápidos</h2>
-                    </div>
-                    <div class="grid-2col">
-                        <div class="report-card">
-                            <h3 style="margin-bottom: 10px;">📊 Inventario Completo</h3>
-                            <p class="text-gray" style="margin-bottom: 15px;">Descarga el listado completo de productos</p>
-                            <button class="btn btn-primary" onclick="window.open('/api/productos', '_blank')">Ver Reporte</button>
-                        </div>
-                        <div class="report-card">
-                            <h3 style="margin-bottom: 10px;">⚠️ Stock Bajo</h3>
-                            <p class="text-gray" style="margin-bottom: 15px;">Productos con stock crítico</p>
-                            <button class="btn btn-primary" onclick="verStockBajo()">Ver Reporte</button>
-                        </div>
+                        
+                        <h4 class="form-title" style="margin-top: 20px;">Detalle de Movimientos</h4>
+                        <table id="gastosDetalleTable">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio</th>
+                                    <th>Subtotal</th>
+                                    <th>Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <script src="js/app.js"></script>
     
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
@@ -914,7 +944,7 @@
     </div>
 
     <!-- Librería para QR Codes -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>

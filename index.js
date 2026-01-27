@@ -478,6 +478,343 @@ app.get('/api/reportes/movimientos-pdf', verificarToken, verificarPermiso('ver_r
   }
 });
 
+// ========== IMPORTAR PRODUCTOS DESDE CSV ==========
+app.post('/api/productos/importar-csv', verificarToken, verificarPermiso('crear_productos'), async (req, res) => {
+  const { productos, sobreescribir } = req.body;
+  const client = await pool.connect();
+  
+  let importados = 0;
+  let actualizados = 0;
+  let errores = 0;
+  let categorias_creadas = 0;
+  const detalles_errores = [];
+  
+  // Cache de categorías creadas durante la importación
+  const categoriasCache = {};
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Cargar categorías existentes
+    const categoriasResult = await client.query('SELECT id, nombre FROM categorias');
+    categoriasResult.rows.forEach(c => {
+      categoriasCache[c.nombre.toLowerCase()] = c.id;
+    });
+    
+    for (const producto of productos) {
+      try {
+        let categoria_id = producto.categoria_id;
+        
+        // Si viene nombre de categoría pero no ID, buscar o crear
+        if (!categoria_id && producto.categoria_nombre) {
+          const nombreCat = producto.categoria_nombre.trim();
+          const nombreCatLower = nombreCat.toLowerCase();
+          
+          if (categoriasCache[nombreCatLower]) {
+            categoria_id = categoriasCache[nombreCatLower];
+          } else {
+            // Crear la categoría nueva
+            const newCat = await client.query(
+              'INSERT INTO categorias (nombre, descripcion) VALUES ($1, $2) RETURNING id',
+              [nombreCat, `Categoría creada automáticamente al importar`]
+            );
+            categoria_id = newCat.rows[0].id;
+            categoriasCache[nombreCatLower] = categoria_id;
+            categorias_creadas++;
+          }
+        }
+        
+        // Verificar si existe por SKU
+        const existe = await client.query(
+          'SELECT id FROM productos WHERE sku = $1',
+          [producto.sku]
+        );
+        
+        if (existe.rows.length > 0) {
+          if (sobreescribir) {
+            // Actualizar producto existente
+            await client.query(
+              `UPDATE productos 
+               SET nombre = $1, descripcion = $2, precio = $3, stock = $4, 
+                   stock_minimo = $5, categoria_id = $6, proveedor_id = $7,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE sku = $8`,
+              [
+                producto.nombre,
+                producto.descripcion || '',
+                parseFloat(producto.precio) || 0,
+                parseInt(producto.stock) || 0,
+                parseInt(producto.stock_minimo) || 0,
+                categoria_id || null,
+                producto.proveedor_id || null,
+                producto.sku
+              ]
+            );
+            actualizados++;
+          } else {
+            detalles_errores.push(`SKU ${producto.sku} ya existe (omitido)`);
+            errores++;
+          }
+        } else {
+          // Crear nuevo producto
+          await client.query(
+            `INSERT INTO productos 
+             (nombre, descripcion, sku, precio, stock, stock_minimo, categoria_id, proveedor_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              producto.nombre,
+              producto.descripcion || '',
+              producto.sku,
+              parseFloat(producto.precio) || 0,
+              parseInt(producto.stock) || 0,
+              parseInt(producto.stock_minimo) || 0,
+              categoria_id || null,
+              producto.proveedor_id || null
+            ]
+          );
+          importados++;
+        }
+      } catch (error) {
+        console.error(`Error importando producto ${producto.sku}:`, error);
+        detalles_errores.push(`Error en ${producto.sku}: ${error.message}`);
+        errores++;
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      mensaje: 'Importación completada',
+      importados,
+      actualizados,
+      errores,
+      categorias_creadas,
+      detalles_errores: detalles_errores.slice(0, 10)
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error en importación CSV:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      mensaje: 'No se pudo completar la importación'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== GENERAR PDF DE INVENTARIO COMPLETO ==========
+app.post('/api/reportes/inventario-pdf', verificarToken, verificarPermiso('generar_reportes'), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, c.nombre as categoria_nombre, pr.nombre as proveedor_nombre
+      FROM productos p
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      LEFT JOIN proveedores pr ON p.proveedor_id = pr.id
+      WHERE p.activo = true
+      ORDER BY c.nombre, p.nombre
+    `);
+    
+    const productos = result.rows;
+    
+    const doc = new PDFDocument({ margin: 30, size: 'LETTER', layout: 'landscape' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Inventario_Completo_${new Date().toISOString().split('T')[0]}.pdf"`);
+    
+    doc.pipe(res);
+    
+    // Título
+    doc.fontSize(18).font('Helvetica-Bold').text('INVENTARIO COMPLETO', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Fecha: ${new Date().toLocaleString('es-HN')} | Generado por: ${req.usuario.nombre} | Total: ${productos.length} productos`, { align: 'center' });
+    doc.moveDown(0.5);
+    
+    // Calcular totales
+    let valorTotal = 0;
+    let stockTotal = 0;
+    productos.forEach(p => {
+      valorTotal += (parseFloat(p.precio) || 0) * (parseInt(p.stock) || 0);
+      stockTotal += parseInt(p.stock) || 0;
+    });
+    
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text(`Stock Total: ${stockTotal} unidades | Valor Total del Inventario: L.${valorTotal.toFixed(2)}`, { align: 'center' });
+    doc.moveDown(0.5);
+    
+    doc.moveTo(30, doc.y).lineTo(762, doc.y).stroke();
+    doc.moveDown(0.5);
+    
+    // Encabezados de tabla
+    const tableTop = doc.y;
+    const colPositions = [30, 180, 280, 350, 410, 470, 530, 620, 700];
+    
+    doc.fontSize(8).font('Helvetica-Bold');
+    doc.text('Producto', colPositions[0], tableTop);
+    doc.text('SKU', colPositions[1], tableTop);
+    doc.text('Categoría', colPositions[2], tableTop);
+    doc.text('Proveedor', colPositions[3], tableTop);
+    doc.text('Stock', colPositions[4], tableTop);
+    doc.text('Mínimo', colPositions[5], tableTop);
+    doc.text('Precio', colPositions[6], tableTop);
+    doc.text('Valor', colPositions[7], tableTop);
+    
+    doc.moveTo(30, tableTop + 12).lineTo(762, tableTop + 12).stroke();
+    
+    let yPosition = tableTop + 18;
+    doc.font('Helvetica').fontSize(7);
+    
+    productos.forEach((p, index) => {
+      if (yPosition > 560) {
+        doc.addPage();
+        yPosition = 40;
+        
+        // Repetir encabezados
+        doc.fontSize(8).font('Helvetica-Bold');
+        doc.text('Producto', colPositions[0], yPosition);
+        doc.text('SKU', colPositions[1], yPosition);
+        doc.text('Categoría', colPositions[2], yPosition);
+        doc.text('Proveedor', colPositions[3], yPosition);
+        doc.text('Stock', colPositions[4], yPosition);
+        doc.text('Mínimo', colPositions[5], yPosition);
+        doc.text('Precio', colPositions[6], yPosition);
+        doc.text('Valor', colPositions[7], yPosition);
+        doc.moveTo(30, yPosition + 12).lineTo(762, yPosition + 12).stroke();
+        yPosition += 18;
+        doc.font('Helvetica').fontSize(7);
+      }
+      
+      const valor = (parseFloat(p.precio) || 0) * (parseInt(p.stock) || 0);
+      const stockColor = p.stock <= p.stock_minimo ? '#ef4444' : '#000000';
+      
+      doc.fillColor('#000000');
+      doc.text((p.nombre || '').substring(0, 28), colPositions[0], yPosition);
+      doc.text((p.sku || 'N/A').substring(0, 15), colPositions[1], yPosition);
+      doc.text((p.categoria_nombre || 'Sin cat.').substring(0, 12), colPositions[2], yPosition);
+      doc.text((p.proveedor_nombre || 'Sin prov.').substring(0, 12), colPositions[3], yPosition);
+      doc.fillColor(stockColor).text(p.stock.toString(), colPositions[4], yPosition);
+      doc.fillColor('#000000').text(p.stock_minimo.toString(), colPositions[5], yPosition);
+      doc.text(`L.${parseFloat(p.precio).toFixed(2)}`, colPositions[6], yPosition);
+      doc.text(`L.${valor.toFixed(2)}`, colPositions[7], yPosition);
+      
+      yPosition += 14;
+      
+      if ((index + 1) % 5 === 0) {
+        doc.moveTo(30, yPosition - 2).lineTo(762, yPosition - 2).strokeOpacity(0.2).stroke().strokeOpacity(1);
+      }
+    });
+    
+    // Pie con totales
+    doc.moveDown(1);
+    doc.moveTo(30, doc.y).lineTo(762, doc.y).lineWidth(2).stroke().lineWidth(1);
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
+    doc.text(`TOTALES: ${productos.length} productos | ${stockTotal} unidades | Valor: L.${valorTotal.toFixed(2)}`, { align: 'right' });
+    
+    doc.end();
+  } catch (error) {
+    console.error('Error generando PDF inventario:', error);
+    res.status(500).json({ error: 'Error generando PDF' });
+  }
+});
+
+// ========== GENERAR PDF DE STOCK BAJO ==========
+app.post('/api/reportes/stock-bajo-pdf', verificarToken, verificarPermiso('generar_reportes'), async (req, res) => {
+  try {
+    const { productos } = req.body;
+    
+    const doc = new PDFDocument({ margin: 30, size: 'LETTER', layout: 'landscape' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Stock_Bajo_${new Date().toISOString().split('T')[0]}.pdf"`);
+    
+    doc.pipe(res);
+    
+    // Título
+    doc.fontSize(20).font('Helvetica-Bold').fillColor('#ef4444').text('[!] ALERTA: PRODUCTOS CON STOCK BAJO', { align: 'center' });
+    doc.moveDown(0.5);
+    
+    doc.fontSize(10).font('Helvetica').fillColor('#000000');
+    doc.text(`Fecha: ${new Date().toLocaleString('es-HN')} | Generado por: ${req.usuario.nombre} | Total: ${productos.length} productos`, { align: 'center' });
+    doc.moveDown(1);
+    
+    doc.moveTo(30, doc.y).lineTo(762, doc.y).stroke();
+    doc.moveDown(0.5);
+    
+    // Tabla
+    const tableTop = doc.y;
+    const colPositions = [30, 180, 280, 360, 440, 500, 560, 620, 700];
+    
+    doc.fontSize(9).font('Helvetica-Bold');
+    doc.text('Producto', colPositions[0], tableTop);
+    doc.text('SKU', colPositions[1], tableTop);
+    doc.text('Categoría', colPositions[2], tableTop);
+    doc.text('Proveedor', colPositions[3], tableTop);
+    doc.text('Stock', colPositions[4], tableTop);
+    doc.text('Mínimo', colPositions[5], tableTop);
+    doc.text('Precio', colPositions[6], tableTop);
+    doc.text('Estado', colPositions[7], tableTop);
+    
+    doc.moveTo(30, tableTop + 15).lineTo(762, tableTop + 15).stroke();
+    
+    let yPosition = tableTop + 22;
+    
+    doc.font('Helvetica').fontSize(8);
+    
+    productos.forEach((p, index) => {
+      if (yPosition > 560) {
+        doc.addPage();
+        yPosition = 40;
+        
+        // Repetir encabezados
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('Producto', colPositions[0], yPosition);
+        doc.text('SKU', colPositions[1], yPosition);
+        doc.text('Categoría', colPositions[2], yPosition);
+        doc.text('Proveedor', colPositions[3], yPosition);
+        doc.text('Stock', colPositions[4], yPosition);
+        doc.text('Mínimo', colPositions[5], yPosition);
+        doc.text('Precio', colPositions[6], yPosition);
+        doc.text('Estado', colPositions[7], yPosition);
+        doc.moveTo(30, yPosition + 15).lineTo(762, yPosition + 15).stroke();
+        yPosition += 22;
+        doc.font('Helvetica').fontSize(8);
+      }
+      
+      const estado = p.stock === 0 ? 'CRÍTICO' : 'BAJO';
+      const color = p.stock === 0 ? '#ef4444' : '#f59e0b';
+      
+      doc.fillColor('#000000');
+      doc.text((p.nombre || '').substring(0, 28), colPositions[0], yPosition);
+      doc.text((p.sku || 'N/A').substring(0, 15), colPositions[1], yPosition);
+      doc.text((p.categoria_nombre || 'Sin cat.').substring(0, 15), colPositions[2], yPosition);
+      doc.text((p.proveedor_nombre || 'Sin proveedor').substring(0, 15), colPositions[3], yPosition);
+      doc.fillColor('#ef4444').text(p.stock.toString(), colPositions[4], yPosition);
+      doc.fillColor('#000000').text(p.stock_minimo.toString(), colPositions[5], yPosition);
+      doc.text(`L.${parseFloat(p.precio || 0).toFixed(2)}`, colPositions[6], yPosition);
+      doc.fillColor(color).font('Helvetica-Bold').text(estado, colPositions[7], yPosition);
+      doc.fillColor('#000000').font('Helvetica');
+      
+      yPosition += 18;
+      
+      if ((index + 1) % 5 === 0) {
+        doc.moveTo(30, yPosition - 3).lineTo(762, yPosition - 3).strokeOpacity(0.3).stroke().strokeOpacity(1);
+      }
+    });
+    
+    // Pie de página
+    doc.moveDown(2);
+    doc.fontSize(10).fillColor('#ef4444').font('Helvetica-Bold');
+    doc.text('[!] ACCION REQUERIDA: Contactar proveedores para reabastecer productos marcados', { align: 'center' });
+    
+    doc.end();
+  } catch (error) {
+    console.error('Error generando PDF stock bajo:', error);
+    res.status(500).json({ error: 'Error generando PDF' });
+  }
+});
+
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

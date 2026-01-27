@@ -311,6 +311,39 @@ router.delete('/:id', verificarToken, verificarPermiso('eliminar_usuarios'), asy
   }
 });
 
+// ========== ACTIVAR USUARIO ==========
+router.put('/:id/activar', verificarToken, verificarPermiso('editar_usuarios'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE usuarios 
+       SET activo = true, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 
+       RETURNING id, email, nombre, activo`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Usuario no encontrado',
+        mensaje: 'El usuario solicitado no existe' 
+      });
+    }
+
+    res.json({
+      mensaje: 'Usuario activado exitosamente',
+      usuario: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error al activar usuario:', error);
+    res.status(500).json({ 
+      error: 'Error del servidor',
+      mensaje: 'No se pudo activar el usuario' 
+    });
+  }
+});
+
 // ========== LISTAR ROLES ==========
 router.get('/roles/lista', verificarToken, async (req, res) => {
   try {
@@ -322,6 +355,87 @@ router.get('/roles/lista', verificarToken, async (req, res) => {
       error: 'Error del servidor',
       mensaje: 'No se pudieron obtener los roles' 
     });
+  }
+});
+
+// ========== 4.3 ACTUALIZAR PERMISOS DE USUARIO ==========
+router.put('/:id/permisos', verificarToken, verificarPermiso('editar_usuarios'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const permisos = req.body;
+    
+    // Verificar que el usuario existe
+    const usuario = await client.query('SELECT id FROM usuarios WHERE id = $1', [id]);
+    if (usuario.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado',
+        mensaje: 'El usuario especificado no existe'
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Verificar si ya tiene registro de permisos
+    const permisosExistentes = await client.query(
+      'SELECT usuario_id FROM permisos_usuario WHERE usuario_id = $1',
+      [id]
+    );
+    
+    // Lista de todos los permisos válidos
+    const permisosValidos = [
+      'ver_productos', 'crear_productos', 'editar_productos', 'eliminar_productos', 'importar_productos',
+      'ver_categorias', 'crear_categorias', 'editar_categorias', 'eliminar_categorias',
+      'ver_movimientos', 'crear_entrada', 'crear_salida',
+      'ver_reportes', 'generar_reportes',
+      'ver_proveedores', 'crear_proveedores', 'editar_proveedores',
+      'ver_asignaciones', 'crear_asignaciones', 'editar_asignaciones',
+      'ver_usuarios', 'crear_usuarios', 'editar_usuarios', 'eliminar_usuarios'
+    ];
+    
+    // Construir objeto de permisos con valores booleanos
+    const permisosActualizados = {};
+    permisosValidos.forEach(p => {
+      permisosActualizados[p] = permisos[p] === true;
+    });
+    
+    if (permisosExistentes.rows.length > 0) {
+      // Actualizar permisos existentes
+      const setClauses = permisosValidos.map((p, i) => `${p} = $${i + 2}`).join(', ');
+      const valores = [id, ...permisosValidos.map(p => permisosActualizados[p])];
+      
+      await client.query(
+        `UPDATE permisos_usuario SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE usuario_id = $1`,
+        valores
+      );
+    } else {
+      // Insertar nuevos permisos
+      const columnas = ['usuario_id', ...permisosValidos].join(', ');
+      const placeholders = permisosValidos.map((_, i) => `$${i + 2}`).join(', ');
+      const valores = [id, ...permisosValidos.map(p => permisosActualizados[p])];
+      
+      await client.query(
+        `INSERT INTO permisos_usuario (${columnas}) VALUES ($1, ${placeholders})`,
+        valores
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      mensaje: 'Permisos actualizados exitosamente',
+      usuario_id: id,
+      permisos_actualizados: Object.keys(permisos).length
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al actualizar permisos:', error);
+    res.status(500).json({
+      error: 'Error del servidor',
+      mensaje: 'No se pudieron actualizar los permisos'
+    });
+  } finally {
+    client.release();
   }
 });
 
