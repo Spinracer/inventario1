@@ -355,6 +355,58 @@ app.get('/api/movimientos', verificarToken, verificarPermiso('ver_movimientos'),
   }
 });
 
+// Obtener detalle de un movimiento con información del producto e imágenes
+app.get('/api/movimientos/:id', verificarToken, verificarPermiso('ver_movimientos'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Obtener movimiento con datos del producto y usuario
+    const movResult = await pool.query(`
+      SELECT 
+        m.*,
+        p.id as producto_id,
+        p.nombre as producto_nombre,
+        p.sku,
+        p.descripcion as producto_descripcion,
+        p.precio,
+        p.stock,
+        p.stock_minimo,
+        c.nombre as categoria_nombre,
+        u.nombre as usuario_nombre,
+        u.email as usuario_email
+      FROM movimientos m 
+      JOIN productos p ON m.producto_id = p.id 
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      LEFT JOIN usuarios u ON m.usuario_id = u.id
+      WHERE m.id = $1
+    `, [id]);
+    
+    if (movResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Movimiento no encontrado' });
+    }
+    
+    const movimiento = movResult.rows[0];
+    
+    // Obtener imágenes del producto
+    const imgResult = await pool.query(`
+      SELECT id, url, es_principal 
+      FROM imagenes_productos 
+      WHERE producto_id = $1 
+      ORDER BY es_principal DESC, id ASC
+    `, [movimiento.producto_id]);
+    
+    movimiento.imagenes = imgResult.rows;
+    
+    // Calcular subtotal
+    movimiento.subtotal = parseFloat(movimiento.precio || 0) * movimiento.cantidad;
+    
+    res.json(movimiento);
+  } catch (err) {
+    console.error('Error al obtener detalle de movimiento:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== REPORTES ==========
 
 // Productos con stock bajo

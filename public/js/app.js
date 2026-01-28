@@ -614,18 +614,117 @@ async function cargarMovimientos() {
         const movimientos = await fetchAuth(`${API_URL}/movimientos`).then(r => r.json());
         const tbody = document.querySelector('#movimientosTable tbody');
         tbody.innerHTML = movimientos.map(m => `
-            <tr>
+            <tr style="cursor: pointer;" onclick="verDetalleMovimiento(${m.id})">
                 <td>${new Date(m.created_at).toLocaleString()}</td>
                 <td>${m.producto_nombre}</td>
                 <td><span class="badge ${m.tipo === 'ENTRADA' ? 'badge-success' : 'badge-warning'}">${m.tipo}</span></td>
                 <td>${m.cantidad}</td>
+                <td>${m.usuario_nombre || 'Sistema'}</td>
                 <td>${m.motivo || '-'}</td>
+                <td>
+                    <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="event.stopPropagation(); verDetalleMovimiento(${m.id})" title="Ver detalle">👁️ Ver</button>
+                </td>
             </tr>
         `).join('');
         await cargarCategoriasEnSelect();
     } catch (error) {
         console.error('Error al cargar movimientos:', error);
         showToast('Error al cargar movimientos', 'error');
+    }
+}
+
+// ========== VER DETALLE DE MOVIMIENTO ==========
+async function verDetalleMovimiento(movimientoId) {
+    try {
+        const mov = await fetchAuth(`${API_URL}/movimientos/${movimientoId}`).then(r => r.json());
+        
+        // Galería de imágenes
+        let galeriaHTML = '<p class="text-gray">Sin imágenes</p>';
+        if (mov.imagenes && mov.imagenes.length > 0) {
+            galeriaHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px;">
+                    ${mov.imagenes.map(img => `
+                        <img src="${img.url}" alt="Producto" style="width: 100%; height: 100px; object-fit: cover; border-radius: 8px; border: 2px solid ${img.es_principal ? '#667eea' : '#e5e7eb'}; cursor: pointer;" onclick="window.open('${img.url}', '_blank')">
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay active';
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 650px;">
+                <div class="modal-header">
+                    <h2>${mov.tipo === 'ENTRADA' ? '📥' : '📤'} Detalle del Movimiento #${mov.id}</h2>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+                </div>
+                
+                <!-- Info del Movimiento -->
+                <div class="form-section" style="background: ${mov.tipo === 'ENTRADA' ? '#ecfdf5' : '#fef3c7'}; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Tipo:</strong>
+                            <span class="badge ${mov.tipo === 'ENTRADA' ? 'badge-success' : 'badge-warning'}" style="margin-left: 5px;">${mov.tipo}</span>
+                        </div>
+                        <div>
+                            <strong>Cantidad:</strong> ${mov.cantidad} unidades
+                        </div>
+                        <div>
+                            <strong>Fecha:</strong> ${new Date(mov.created_at).toLocaleString('es-HN')}
+                        </div>
+                        <div>
+                            <strong>Realizado por:</strong> ${mov.usuario_nombre || 'Sistema'}
+                        </div>
+                    </div>
+                    ${mov.motivo ? `<div style="margin-top: 10px;"><strong>Motivo:</strong> ${mov.motivo}</div>` : ''}
+                    ${mov.observaciones ? `<div style="margin-top: 5px;"><strong>Observaciones:</strong> ${mov.observaciones}</div>` : ''}
+                </div>
+                
+                <!-- Info del Producto -->
+                <div class="form-section">
+                    <h3 class="form-title">📦 Información del Producto</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Nombre:</strong> ${mov.producto_nombre}</div>
+                        <div><strong>SKU:</strong> ${mov.sku || 'N/A'}</div>
+                        <div><strong>Categoría:</strong> ${mov.categoria_nombre || 'Sin categoría'}</div>
+                        <div><strong>Precio:</strong> L.${parseFloat(mov.precio || 0).toFixed(2)}</div>
+                        <div><strong>Stock actual:</strong> <span class="badge ${mov.stock <= mov.stock_minimo ? 'badge-danger' : 'badge-success'}">${mov.stock}</span></div>
+                        <div><strong>Stock mínimo:</strong> ${mov.stock_minimo}</div>
+                    </div>
+                    ${mov.producto_descripcion ? `<div style="margin-top: 10px;"><strong>Descripción:</strong> ${mov.producto_descripcion}</div>` : ''}
+                </div>
+                
+                <!-- Valor del Movimiento -->
+                <div class="form-section" style="background: #f0f9ff; padding: 15px; border-radius: 10px; margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>Valor del movimiento:</strong>
+                        </div>
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">
+                            L.${mov.subtotal.toFixed(2)}
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                        (${mov.cantidad} x L.${parseFloat(mov.precio || 0).toFixed(2)})
+                    </div>
+                </div>
+                
+                <!-- Imágenes del Producto -->
+                <div class="form-section" style="margin-top: 15px;">
+                    <h3 class="form-title">🖼️ Imágenes del Producto</h3>
+                    ${galeriaHTML}
+                </div>
+                
+                <div style="margin-top: 20px; text-align: right;">
+                    <button onclick="this.closest('.modal-overlay').remove()" class="btn btn-cancel">Cerrar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    } catch (error) {
+        console.error('Error al cargar detalle:', error);
+        showToast('Error al cargar detalle del movimiento', 'error');
     }
 }
 

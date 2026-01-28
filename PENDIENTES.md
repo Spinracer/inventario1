@@ -85,9 +85,11 @@
 - [ ] Verificar que "Descargar inventario completo" funcione (Excel y PDF)
 - [ ] Verificar que "Stock bajo" descargue correctamente
 
-### 5. Historial de Movimientos - Detalle al hacer clic
-- [ ] Cuando se hace clic en un movimiento del historial, abrir modal con detalle completo
-- [ ] Mostrar: producto, cantidad, tipo, fecha, usuario, observaciones, precio, subtotal
+### 5. Historial de Movimientos - Detalle al hacer clic ✅ COMPLETADO
+- [x] Cuando se hace clic en un movimiento del historial, abrir modal con detalle completo
+- [x] Mostrar: producto, cantidad, tipo, fecha, usuario, observaciones, precio, subtotal
+- [x] Mostrar imágenes del producto
+- [x] Agregar columna "Realizado por" en la tabla de movimientos
 
 ### 6. Configuración
 - [ ] Agregar opción "No mostrar más notificaciones" en menú de configuración (⚙️)

@@ -1165,6 +1165,39 @@ body.dark-mode .form-group select {
 }
 
 /* ========== MEJORAS RESPONSIVE ADICIONALES ========== */
+
+/* Mejora para tabla de usuarios - botones en grid */
+#usuariosTable .action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+    min-width: 200px;
+}
+
+#usuariosTable .action-buttons .btn-sm {
+    width: 100%;
+    justify-content: center;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+@media (min-width: 1200px) {
+    #usuariosTable .action-buttons {
+        grid-template-columns: repeat(4, auto);
+        min-width: auto;
+    }
+    
+    #usuariosTable .action-buttons .btn-sm {
+        width: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    #usuariosTable .action-buttons {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 480px) {
     .action-buttons {
         flex-direction: column;
@@ -1174,6 +1207,10 @@ body.dark-mode .form-group select {
     .action-buttons .btn-sm {
         width: 100%;
         margin: 2px 0;
+    }
+    
+    #usuariosTable .action-buttons {
+        grid-template-columns: 1fr;
     }
     
     .modal {
